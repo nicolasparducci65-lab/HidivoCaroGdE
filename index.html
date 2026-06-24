@@ -313,6 +313,95 @@
     color: white;
     border-color: var(--color-primary);
   }
+
+  /* ---- Contratos: tabs y comunicaciones ---- */
+  .modal-card.extra-wide { max-width: 860px; }
+  .tabs-bar {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 20px;
+  }
+  .tabs-bar button {
+    width: auto;
+    margin-top: 0;
+    padding: 10px 16px;
+    background: transparent;
+    color: var(--color-text-muted);
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    font-size: 14px;
+  }
+  .tabs-bar button.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 500;
+  }
+  .comunicacion-row {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .comunicacion-row .meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .comunicacion-row .meta-left {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+  }
+  .comunicacion-row .numero {
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .badge.direccion-enviada { background: #e6f1fb; color: #0c447c; }
+  .badge.direccion-recibida { background: #eeedfe; color: #3c3489; }
+  .badge.estado-pendiente { background: #faeeda; color: #854f0b; }
+  .badge.estado-respondida { background: #eaf3de; color: #3b6d11; }
+  .comunicacion-row .asunto {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+  .comunicacion-row .contenido {
+    font-size: 13px;
+    color: var(--color-text-muted);
+  }
+  .comunicacion-row .respuesta-de {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-top: 6px;
+    font-style: italic;
+  }
+  textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 70px;
+  }
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .checkbox-row input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+  }
+  .checkbox-row label {
+    margin: 0;
+  }
 </style>
 </head>
 <body>
@@ -513,7 +602,8 @@ function renderModule(modulo) {
     servicios: renderServicios,
     clientes: renderClientes,
     proveedores: renderProveedores,
-    proformas: renderProformas
+    proformas: renderProformas,
+    contratos: renderContratos
   };
 
   if (renderers[modulo]) {
@@ -1332,7 +1422,16 @@ async function convertirAContrato(proformaId) {
     return;
   }
 
+  // Calculamos el siguiente número correlativo de contrato consultando
+  // el máximo actual (mismo patrón usado en Proformas)
+  const { data: existentes } = await sb.from('contratos').select('numero');
+  const maxNumero = (existentes || []).reduce((max, c) => {
+    const n = parseInt(c.numero) || 0;
+    return Math.max(max, n);
+  }, 0);
+
   const payload = {
+    numero: String(maxNumero + 1),
     cliente_id: proforma.cliente_id,
     proforma_origen_id: proforma.id,
     monto_total: proforma.total,
@@ -1345,8 +1444,381 @@ async function convertirAContrato(proformaId) {
     return;
   }
 
-  alert('Contrato creado correctamente. Podrás verlo en el módulo de Contratos.');
+  alert('Contrato N.° ' + payload.numero + ' creado correctamente. Podrás verlo en el módulo de Contratos.');
   renderProformas();
+}
+
+// =====================================================================
+// MÓDULO: CONTRATOS (con Comunicaciones)
+// =====================================================================
+const ESTADO_CONTRATO_LABELS = { vigente: 'Vigente', cerrado: 'Cerrado', anulado: 'Anulado' };
+const ESTADO_CONTRATO_BADGE = { vigente: 'activo', cerrado: 'inactivo', anulado: 'inactivo' };
+const FORMA_PAGO_LABELS = { anticipo_saldo: 'Anticipo + saldo', cuotas: 'Cuotas', contraentrega: 'Contraentrega' };
+
+let contratos_cache = [];
+let modal_contrato_id = null;
+let modal_contrato_tab = 'datos';
+let modal_comunicaciones = [];
+
+async function renderContratos() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Contratos</h2>
+      <button class="btn" onclick="abrirModalContrato()">+ Nuevo contrato</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="contratos-search" placeholder="Buscar por número o cliente...">
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Cliente</th>
+          <th>Monto total</th>
+          <th>Forma de pago</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="contratos-tbody">
+        <tr><td colspan="6">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('contratos-search').addEventListener('input', (e) => {
+    pintarContratos(filtrar(contratos_cache, e.target.value, ['numero']));
+  });
+
+  if (!clientes_cache.length) {
+    const { data } = await sb.from('clientes').select('*').eq('activo', true);
+    clientes_cache = data || [];
+  }
+
+  const { data, error } = await sb
+    .from('contratos')
+    .select('*, clientes(razon_social)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    document.getElementById('contratos-tbody').innerHTML =
+      '<tr><td colspan="6">Error cargando contratos: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  contratos_cache = data;
+  pintarContratos(contratos_cache);
+}
+
+function pintarContratos(lista) {
+  const tbody = document.getElementById('contratos-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="6">No hay contratos registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(c => `
+    <tr>
+      <td>${escapeHtml(c.numero) || '—'}</td>
+      <td>${escapeHtml(c.clientes?.razon_social) || '—'}</td>
+      <td>$${Number(c.monto_total || 0).toFixed(2)}</td>
+      <td>${FORMA_PAGO_LABELS[c.forma_pago] || '—'}</td>
+      <td><span class="badge ${ESTADO_CONTRATO_BADGE[c.estado] || 'inactivo'}">${ESTADO_CONTRATO_LABELS[c.estado] || c.estado}</span></td>
+      <td class="row-actions">
+        <a onclick="abrirModalContrato('${c.id}')">Ver / editar</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function abrirModalContrato(id) {
+  modal_contrato_id = id || null;
+  modal_contrato_tab = 'datos';
+  modal_comunicaciones = [];
+
+  let contrato = id ? contratos_cache.find(c => c.id === id) : null;
+
+  if (id) {
+    const { data, error } = await sb
+      .from('contrato_comunicaciones')
+      .select('*')
+      .eq('contrato_id', id)
+      .order('numero', { ascending: false });
+    if (!error) modal_comunicaciones = data || [];
+  }
+
+  pintarModalContrato(contrato);
+}
+
+function pintarModalContrato(contrato) {
+  const esEdicion = !!contrato;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card extra-wide">
+        <h3>${esEdicion ? 'Contrato N.° ' + escapeHtml(contrato.numero) : 'Nuevo contrato'}</h3>
+        <div class="tabs-bar" id="contrato-tabs">
+          <button data-tab="datos" class="${modal_contrato_tab === 'datos' ? 'active' : ''}">Datos del contrato</button>
+          <button data-tab="comunicaciones" class="${modal_contrato_tab === 'comunicaciones' ? 'active' : ''}" ${!esEdicion ? 'disabled title="Guarda el contrato primero"' : ''}>
+            Comunicaciones ${modal_comunicaciones.length ? '(' + modal_comunicaciones.length + ')' : ''}
+          </button>
+        </div>
+        <div id="contrato-tab-content"></div>
+        <div id="contrato-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+          ${modal_contrato_tab === 'datos' ? '<button class="btn" onclick="guardarContrato()">Guardar</button>' : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('contrato-tabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.disabled) return;
+    modal_contrato_tab = btn.dataset.tab;
+    pintarModalContrato(contrato);
+  });
+
+  if (modal_contrato_tab === 'datos') {
+    pintarTabDatosContrato(contrato);
+  } else {
+    pintarTabComunicaciones(contrato);
+  }
+}
+
+function pintarTabDatosContrato(contrato) {
+  document.getElementById('contrato-tab-content').innerHTML = `
+    <div class="field-row">
+      <div>
+        <label>Cliente</label>
+        <select id="cont-cliente">
+          <option value="">Selecciona un cliente</option>
+          ${clientes_cache.map(c => `<option value="${c.id}" ${contrato?.cliente_id === c.id ? 'selected' : ''}>${escapeHtml(c.razon_social)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label>Estado</label>
+        <select id="cont-estado">
+          ${Object.entries(ESTADO_CONTRATO_LABELS).map(([k, v]) =>
+            `<option value="${k}" ${(contrato?.estado || 'vigente') === k ? 'selected' : ''}>${v}</option>`
+          ).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div>
+        <label>Monto total</label>
+        <input type="text" id="cont-monto" value="${contrato?.monto_total ?? ''}" placeholder="0.00">
+      </div>
+      <div>
+        <label>Forma de pago</label>
+        <select id="cont-forma-pago">
+          <option value="">Selecciona...</option>
+          ${Object.entries(FORMA_PAGO_LABELS).map(([k, v]) =>
+            `<option value="${k}" ${contrato?.forma_pago === k ? 'selected' : ''}>${v}</option>`
+          ).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div>
+        <label>Fecha de inicio</label>
+        <input type="date" id="cont-fecha-inicio" value="${contrato?.fecha_inicio || ''}">
+      </div>
+      <div>
+        <label>Fecha de fin</label>
+        <input type="date" id="cont-fecha-fin" value="${contrato?.fecha_fin || ''}">
+      </div>
+    </div>
+    <label>Referencia a proyecto en HIDIVO GdP (opcional)</label>
+    <input type="text" id="cont-proyecto-ref" value="${escapeHtml(contrato?.proyecto_gdp_ref)}" placeholder="ej. Parqueadero PTAR - SONGA">
+    ${contrato?.proforma_origen_id ? '<p style="font-size:12px;color:var(--color-text-muted);margin-top:8px;">Este contrato se generó a partir de una proforma aprobada.</p>' : ''}
+  `;
+}
+
+async function guardarContrato() {
+  const payload = {
+    cliente_id: document.getElementById('cont-cliente').value,
+    estado: document.getElementById('cont-estado').value,
+    monto_total: parseFloat(document.getElementById('cont-monto').value) || 0,
+    forma_pago: document.getElementById('cont-forma-pago').value || null,
+    fecha_inicio: document.getElementById('cont-fecha-inicio').value || null,
+    fecha_fin: document.getElementById('cont-fecha-fin').value || null,
+    proyecto_gdp_ref: document.getElementById('cont-proyecto-ref').value.trim() || null
+  };
+
+  if (!payload.cliente_id) {
+    showMsg('contrato-msg', 'Selecciona un cliente.', 'error');
+    return;
+  }
+
+  if (modal_contrato_id) {
+    const { error } = await sb.from('contratos').update(payload).eq('id', modal_contrato_id);
+    if (error) { showMsg('contrato-msg', 'Error: ' + error.message, 'error'); return; }
+  } else {
+    const maxNumero = contratos_cache.reduce((max, c) => Math.max(max, parseInt(c.numero) || 0), 0);
+    payload.numero = String(maxNumero + 1);
+    const { data, error } = await sb.from('contratos').insert(payload).select().single();
+    if (error) { showMsg('contrato-msg', 'Error: ' + error.message, 'error'); return; }
+    modal_contrato_id = data.id;
+  }
+
+  closeModal();
+  renderContratos();
+}
+
+// ---- Pestaña de Comunicaciones ----
+
+function pintarTabComunicaciones(contrato) {
+  document.getElementById('contrato-tab-content').innerHTML = `
+    <button class="btn btn-secondary" style="margin-bottom:16px;" onclick="abrirFormComunicacion()">+ Registrar comunicación</button>
+    <div id="comunicaciones-form-wrap"></div>
+    <div id="comunicaciones-lista"></div>
+  `;
+  pintarListaComunicaciones();
+}
+
+function pintarListaComunicaciones() {
+  const cont = document.getElementById('comunicaciones-lista');
+  if (!modal_comunicaciones.length) {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">No hay comunicaciones registradas para este contrato.</p>';
+    return;
+  }
+
+  cont.innerHTML = modal_comunicaciones.map(com => {
+    const respuestaDe = com.comunicacion_relacionada_id
+      ? modal_comunicaciones.find(c => c.id === com.comunicacion_relacionada_id)
+      : null;
+    const estadoBadge = com.estado_respuesta === 'pendiente'
+      ? '<span class="badge estado-pendiente">Pendiente de respuesta</span>'
+      : com.estado_respuesta === 'respondida'
+        ? '<span class="badge estado-respondida">Respondida</span>'
+        : '';
+
+    return `
+      <div class="comunicacion-row">
+        <div class="meta">
+          <div class="meta-left">
+            <span class="numero">N.° ${com.numero}</span>
+            <span class="badge direccion-${com.direccion}">${com.direccion === 'enviada' ? 'Enviada' : 'Recibida'}</span>
+            <span style="color:var(--color-text-muted);">${com.tipo || ''}</span>
+            <span style="color:var(--color-text-muted);">${com.fecha || ''}</span>
+          </div>
+          ${estadoBadge}
+        </div>
+        <div class="asunto">${escapeHtml(com.asunto)}</div>
+        <div class="contenido">${escapeHtml(com.contenido)}</div>
+        ${respuestaDe ? `<div class="respuesta-de">Responde a la comunicación N.° ${respuestaDe.numero}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function abrirFormComunicacion() {
+  const pendientes = modal_comunicaciones.filter(c => c.estado_respuesta === 'pendiente');
+
+  document.getElementById('comunicaciones-form-wrap').innerHTML = `
+    <div class="comunicacion-row" style="background:var(--color-bg);">
+      <div class="field-row">
+        <div>
+          <label>Dirección</label>
+          <select id="com-direccion">
+            <option value="enviada">Enviada (HIDIVO → contraparte)</option>
+            <option value="recibida">Recibida (contraparte → HIDIVO)</option>
+          </select>
+        </div>
+        <div>
+          <label>Tipo</label>
+          <select id="com-tipo">
+            <option value="oficio">Oficio</option>
+            <option value="correo">Correo</option>
+            <option value="memorando">Memorando</option>
+            <option value="acta">Acta</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+      </div>
+      <label>Asunto</label>
+      <input type="text" id="com-asunto" placeholder="ej. Solicitud de prórroga de plazo">
+      <label>Contenido / resumen</label>
+      <textarea id="com-contenido" placeholder="Resumen del contenido de la comunicación"></textarea>
+      <div class="field-row">
+        <div>
+          <label>Remitente (si es recibida)</label>
+          <input type="text" id="com-remitente" placeholder="Nombre / cargo">
+        </div>
+        <div>
+          <label>Destinatario (si es enviada)</label>
+          <input type="text" id="com-destinatario" placeholder="Nombre / cargo">
+        </div>
+      </div>
+      <label>Fecha</label>
+      <input type="date" id="com-fecha" value="${new Date().toISOString().slice(0,10)}">
+      <div class="checkbox-row">
+        <input type="checkbox" id="com-requiere-respuesta">
+        <label for="com-requiere-respuesta">Esta comunicación requiere respuesta</label>
+      </div>
+      ${pendientes.length ? `
+        <label style="margin-top:16px;">¿Es respuesta a alguna comunicación pendiente?</label>
+        <select id="com-relacionada">
+          <option value="">No es respuesta a ninguna</option>
+          ${pendientes.map(p => `<option value="${p.id}">N.° ${p.numero} — ${escapeHtml(p.asunto)}</option>`).join('')}
+        </select>
+      ` : ''}
+      <div id="com-msg"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('comunicaciones-form-wrap').innerHTML=''">Cancelar</button>
+        <button class="btn" onclick="guardarComunicacion()">Registrar</button>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarComunicacion() {
+  const asunto = document.getElementById('com-asunto').value.trim();
+  if (!asunto) {
+    showMsg('com-msg', 'El asunto es obligatorio.', 'error');
+    return;
+  }
+
+  const maxNumero = modal_comunicaciones.reduce((max, c) => Math.max(max, c.numero || 0), 0);
+  const relacionadaEl = document.getElementById('com-relacionada');
+
+  const payload = {
+    contrato_id: modal_contrato_id,
+    numero: maxNumero + 1,
+    direccion: document.getElementById('com-direccion').value,
+    tipo: document.getElementById('com-tipo').value,
+    asunto: asunto,
+    contenido: document.getElementById('com-contenido').value.trim(),
+    remitente: document.getElementById('com-remitente').value.trim() || null,
+    destinatario: document.getElementById('com-destinatario').value.trim() || null,
+    fecha: document.getElementById('com-fecha').value || null,
+    requiere_respuesta: document.getElementById('com-requiere-respuesta').checked,
+    estado_respuesta: document.getElementById('com-requiere-respuesta').checked ? 'pendiente' : 'n/a',
+    comunicacion_relacionada_id: relacionadaEl && relacionadaEl.value ? relacionadaEl.value : null
+  };
+
+  const { error } = await sb.from('contrato_comunicaciones').insert(payload);
+  if (error) {
+    showMsg('com-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+
+  // Recargar comunicaciones (el trigger ya habrá marcado la original como respondida)
+  const { data } = await sb
+    .from('contrato_comunicaciones')
+    .select('*')
+    .eq('contrato_id', modal_contrato_id)
+    .order('numero', { ascending: false });
+  modal_comunicaciones = data || [];
+
+  document.getElementById('comunicaciones-form-wrap').innerHTML = '';
+  pintarListaComunicaciones();
+
+  // Refrescar el contador en la pestaña
+  const tabBtn = document.querySelector('#contrato-tabs button[data-tab="comunicaciones"]');
+  if (tabBtn) tabBtn.textContent = 'Comunicaciones (' + modal_comunicaciones.length + ')';
 }
 
 
