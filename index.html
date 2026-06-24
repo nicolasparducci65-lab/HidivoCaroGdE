@@ -614,21 +614,6 @@
     margin-top: 0;
     padding: 10px 20px;
   }
-  .chat-reply-banner {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 20px;
-    background: var(--color-bg);
-    font-size: 12px;
-    color: var(--color-text-muted);
-    border-top: 1px solid var(--color-border);
-  }
-  .chat-reply-banner a {
-    color: var(--color-primary);
-    cursor: pointer;
-    font-weight: 500;
-  }
   .chat-bubble-wrap {
     display: flex;
     flex-direction: column;
@@ -692,6 +677,47 @@
   }
   .chat-bubble-actions a:hover { color: var(--color-primary); }
   .chat-bubble-actions.mine { justify-content: flex-end; }
+
+  .chat-thread-panel {
+    width: 340px;
+    border-left: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .chat-thread-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .chat-thread-header a {
+    cursor: pointer;
+    color: var(--color-text-muted);
+  }
+  .chat-thread-root {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg);
+  }
+  .chat-thread-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-respuestas-link {
+    font-size: 12px;
+    color: var(--color-primary);
+    cursor: pointer;
+    margin-top: 3px;
+    padding-left: 4px;
+  }
 </style>
 </head>
 <body>
@@ -3249,7 +3275,6 @@ let chat_perfiles_cache = {}; // id -> perfil, para mostrar nombres y presencia
 let chat_realtime_channel = null;
 let chat_presencia_channel = null;
 let chat_usuario_actual = null;
-let chat_respondiendo_a = null; // id del mensaje al que se está respondiendo
 
 async function renderChat() {
   const main = document.getElementById('main-content');
@@ -3263,10 +3288,21 @@ async function renderChat() {
       </aside>
       <div class="chat-main">
         <div class="chat-messages" id="chat-messages"></div>
-        <div id="chat-reply-banner"></div>
         <div class="chat-input-bar">
           <input type="text" id="chat-input" placeholder="Escribe un mensaje...">
           <button class="btn" onclick="enviarMensajeChat()">Enviar</button>
+        </div>
+      </div>
+      <div class="chat-thread-panel hidden" id="chat-thread-panel">
+        <div class="chat-thread-header">
+          <span>Hilo</span>
+          <a onclick="cerrarHiloChat()">✕</a>
+        </div>
+        <div class="chat-thread-root" id="chat-thread-root"></div>
+        <div class="chat-thread-messages" id="chat-thread-messages"></div>
+        <div class="chat-input-bar">
+          <input type="text" id="chat-thread-input" placeholder="Responder en el hilo...">
+          <button class="btn" onclick="enviarRespuestaHilo()">Enviar</button>
         </div>
       </div>
     </div>
@@ -3274,6 +3310,9 @@ async function renderChat() {
 
   document.getElementById('chat-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') enviarMensajeChat();
+  });
+  document.getElementById('chat-thread-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') enviarRespuestaHilo();
   });
 
   const { data: { user } } = await sb.auth.getUser();
@@ -3321,104 +3360,171 @@ function pintarMensajesChat() {
   const cont = document.getElementById('chat-messages');
   if (!cont) return;
 
-  if (!chat_mensajes_cache.length) {
+  const raiz = chat_mensajes_cache.filter(m => !m.mensaje_padre_id);
+
+  if (!raiz.length) {
     cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Aún no hay mensajes en este canal. ¡Sé el primero en escribir!</p>';
     return;
   }
 
-  // Solo los mensajes raíz (sin padre) definen el orden principal;
-  // cada respuesta se pinta justo debajo de su mensaje padre, en orden
-  // cronológico, simulando un hilo anidado inline.
-  const raiz = chat_mensajes_cache.filter(m => !m.mensaje_padre_id);
-  const respuestasPorPadre = {};
-  chat_mensajes_cache.filter(m => m.mensaje_padre_id).forEach(m => {
-    if (!respuestasPorPadre[m.mensaje_padre_id]) respuestasPorPadre[m.mensaje_padre_id] = [];
-    respuestasPorPadre[m.mensaje_padre_id].push(m);
-  });
-
-  let html = '';
-  raiz.forEach(m => {
-    html += renderBurbujaChat(m, false);
-    (respuestasPorPadre[m.id] || []).forEach(hijo => {
-      html += renderBurbujaChat(hijo, true, m);
-    });
-  });
-
-  cont.innerHTML = html;
+  cont.innerHTML = raiz.map(m => renderBurbujaChat(m)).join('');
   cont.scrollTop = cont.scrollHeight;
+
+  // Si el hilo abierto sigue existiendo, refrescar su contenido también
+  if (chat_hilo_abierto_id) {
+    pintarPanelHilo();
+  }
 }
 
-function renderBurbujaChat(m, esHilo, mensajePadre) {
+function contarRespuestas(mensajeId) {
+  return chat_mensajes_cache.filter(m => m.mensaje_padre_id === mensajeId && !m.eliminado).length;
+}
+
+function renderBurbujaChat(m) {
   const esMio = m.autor_id === chat_usuario_actual?.id;
   const autor = chat_perfiles_cache[m.autor_id];
   const nombreAutor = autor?.nombre_completo || autor?.email || 'Usuario';
   const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) : '';
   const lado = esMio ? 'mine' : 'theirs';
+  const numRespuestas = contarRespuestas(m.id);
 
   if (m.eliminado) {
     return `
-      <div class="chat-bubble-wrap ${lado} ${esHilo ? 'hilo' : ''}">
-        ${esHilo ? '<div class="chat-hilo-indicador">↳ en respuesta a ' + escapeHtml(chat_perfiles_cache[mensajePadre.autor_id]?.nombre_completo || '') + '</div>' : ''}
+      <div class="chat-bubble-wrap ${lado}">
         <div class="chat-bubble eliminado">Mensaje eliminado</div>
       </div>
     `;
   }
 
   return `
-    <div class="chat-bubble-wrap ${lado} ${esHilo ? 'hilo' : ''}">
-      ${esHilo ? '<div class="chat-hilo-indicador">↳ en respuesta a ' + escapeHtml(chat_perfiles_cache[mensajePadre.autor_id]?.nombre_completo || '') + '</div>' : ''}
+    <div class="chat-bubble-wrap ${lado}">
       <div class="chat-bubble ${lado}">
         ${!esMio ? '<div class="autor">' + escapeHtml(nombreAutor) + '</div>' : ''}
         <div>${escapeHtml(m.contenido)}</div>
         <div class="hora">${hora}</div>
       </div>
       <div class="chat-bubble-actions ${lado}">
-        <a onclick="responderMensajeChat('${m.id}')">Responder</a>
+        <a onclick="abrirHiloChat('${m.id}')">Responder</a>
         ${esMio ? '<a onclick="eliminarMensajeChat(\'' + m.id + '\')">Eliminar</a>' : ''}
       </div>
+      ${numRespuestas > 0 ? `<div class="chat-respuestas-link" onclick="abrirHiloChat('${m.id}')">${numRespuestas} respuesta${numRespuestas > 1 ? 's' : ''}</div>` : ''}
     </div>
   `;
 }
 
-function responderMensajeChat(mensajeId) {
-  chat_respondiendo_a = mensajeId;
-  const mensaje = chat_mensajes_cache.find(m => m.id === mensajeId);
-  const autor = chat_perfiles_cache[mensaje.autor_id];
+let chat_hilo_abierto_id = null;
+
+function abrirHiloChat(mensajeId) {
+  chat_hilo_abierto_id = mensajeId;
+  document.getElementById('chat-thread-panel').classList.remove('hidden');
+  pintarPanelHilo();
+  document.getElementById('chat-thread-input').focus();
+}
+
+function cerrarHiloChat() {
+  chat_hilo_abierto_id = null;
+  document.getElementById('chat-thread-panel').classList.add('hidden');
+}
+
+function pintarPanelHilo() {
+  if (!chat_hilo_abierto_id) return;
+  const raiz = chat_mensajes_cache.find(m => m.id === chat_hilo_abierto_id);
+  if (!raiz) { cerrarHiloChat(); return; }
+
+  document.getElementById('chat-thread-root').innerHTML = renderMensajeSimpleHilo(raiz);
+
+  const respuestas = chat_mensajes_cache
+    .filter(m => m.mensaje_padre_id === chat_hilo_abierto_id)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+  const cont = document.getElementById('chat-thread-messages');
+  if (!respuestas.length) {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:12px;">Aún no hay respuestas en este hilo.</p>';
+  } else {
+    cont.innerHTML = respuestas.map(m => renderMensajeSimpleHilo(m, true)).join('');
+  }
+  cont.scrollTop = cont.scrollHeight;
+}
+
+function renderMensajeSimpleHilo(m, conAccionEliminar) {
+  const esMio = m.autor_id === chat_usuario_actual?.id;
+  const autor = chat_perfiles_cache[m.autor_id];
   const nombreAutor = autor?.nombre_completo || autor?.email || 'Usuario';
+  const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) : '';
 
-  document.getElementById('chat-reply-banner').innerHTML = `
-    <div class="chat-reply-banner">
-      <span>Respondiendo a <strong>${escapeHtml(nombreAutor)}</strong>: "${escapeHtml((mensaje.contenido || '').slice(0, 60))}${mensaje.contenido.length > 60 ? '...' : ''}"</span>
-      <a onclick="cancelarRespuestaChat()">Cancelar</a>
+  if (m.eliminado) {
+    return `<div class="chat-bubble-wrap ${esMio ? 'mine' : 'theirs'}"><div class="chat-bubble eliminado">Mensaje eliminado</div></div>`;
+  }
+
+  return `
+    <div class="chat-bubble-wrap ${esMio ? 'mine' : 'theirs'}">
+      <div class="chat-bubble ${esMio ? 'mine' : 'theirs'}">
+        <div class="autor">${escapeHtml(nombreAutor)}</div>
+        <div>${escapeHtml(m.contenido)}</div>
+        <div class="hora">${hora}</div>
+      </div>
+      ${conAccionEliminar && esMio ? `<div class="chat-bubble-actions mine"><a onclick="eliminarMensajeChat('${m.id}')">Eliminar</a></div>` : ''}
     </div>
   `;
-  document.getElementById('chat-input').focus();
 }
 
-function cancelarRespuestaChat() {
-  chat_respondiendo_a = null;
-  document.getElementById('chat-reply-banner').innerHTML = '';
+async function enviarRespuestaHilo() {
+  const input = document.getElementById('chat-thread-input');
+  const contenido = input.value.trim();
+  if (!contenido || !chat_hilo_abierto_id) return;
+
+  input.value = '';
+
+  const { error } = await sb.from('mensajes').insert({
+    canal_id: chat_canal_id,
+    autor_id: chat_usuario_actual.id,
+    contenido: contenido,
+    mensaje_padre_id: chat_hilo_abierto_id
+  });
+
+  if (error) {
+    alert('Error enviando respuesta: ' + error.message);
+  }
 }
 
 async function eliminarMensajeChat(mensajeId) {
-  if (!confirm('¿Eliminar este mensaje? Quedará marcado como "Mensaje eliminado" para todos.')) return;
+  const mensaje = chat_mensajes_cache.find(m => m.id === mensajeId);
+  const esRaiz = !mensaje.mensaje_padre_id;
+  const hijos = esRaiz ? chat_mensajes_cache.filter(m => m.mensaje_padre_id === mensajeId) : [];
 
-  const { error } = await sb
+  const confirmacion = hijos.length
+    ? '¿Eliminar este mensaje? Tiene ' + hijos.length + ' respuesta(s) que también se eliminarán.'
+    : '¿Eliminar este mensaje? Quedará marcado como "Mensaje eliminado" para todos.';
+
+  if (!confirm(confirmacion)) return;
+
+  // El botón "Eliminar" solo se muestra en mensajes propios, así que el
+  // mensaje raíz siempre pertenece al usuario actual. Si tiene hijos
+  // (respuestas de cualquier persona), se eliminan en cascada también.
+  const { error: errorRaiz } = await sb
     .from('mensajes')
     .update({ eliminado: true, eliminado_en: new Date().toISOString() })
     .eq('id', mensajeId)
-    .eq('autor_id', chat_usuario_actual.id); // doble seguro: solo borra lo propio
+    .eq('autor_id', chat_usuario_actual.id);
 
-  if (error) {
-    alert('Error eliminando mensaje: ' + error.message);
+  if (errorRaiz) {
+    alert('Error eliminando mensaje: ' + errorRaiz.message);
     return;
   }
 
-  const idx = chat_mensajes_cache.findIndex(m => m.id === mensajeId);
-  if (idx !== -1) {
-    chat_mensajes_cache[idx].eliminado = true;
-    pintarMensajesChat();
+  if (hijos.length) {
+    await sb
+      .from('mensajes')
+      .update({ eliminado: true, eliminado_en: new Date().toISOString() })
+      .in('id', hijos.map(h => h.id));
   }
+
+  const idsAfectados = [mensajeId, ...hijos.map(h => h.id)];
+  idsAfectados.forEach(id => {
+    const idx = chat_mensajes_cache.findIndex(m => m.id === id);
+    if (idx !== -1) chat_mensajes_cache[idx].eliminado = true;
+  });
+  pintarMensajesChat();
 }
 
 async function enviarMensajeChat() {
@@ -3427,14 +3533,12 @@ async function enviarMensajeChat() {
   if (!contenido) return;
 
   input.value = '';
-  const padreId = chat_respondiendo_a;
-  cancelarRespuestaChat();
 
   const { error } = await sb.from('mensajes').insert({
     canal_id: chat_canal_id,
     autor_id: chat_usuario_actual.id,
     contenido: contenido,
-    mensaje_padre_id: padreId
+    mensaje_padre_id: null
   });
 
   if (error) {
