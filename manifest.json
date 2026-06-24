@@ -1,0 +1,10 @@
+{
+  "name": "CARO GdE - HIDIVO",
+  "short_name": "CARO GdE",
+  "description": "Gestión de empresas - HIDIVO",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4f3ee",
+  "theme_color": "#0c447c",
+  "icons": []
+}

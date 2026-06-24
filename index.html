@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CARO GdE — HIDIVO</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root {
+    --color-primary: #0c447c;
+    --color-bg: #f4f3ee;
+    --color-surface: #ffffff;
+    --color-border: #d3d1c7;
+    --color-text: #2c2c2a;
+    --color-text-muted: #5f5e5a;
+    --color-danger: #a32d2d;
+    --color-success: #3b6d11;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    min-height: 100vh;
+  }
+  .auth-wrap {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .auth-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 40px;
+    max-width: 400px;
+    width: 100%;
+  }
+  .auth-card h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .auth-card .subtitle {
+    color: var(--color-text-muted);
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 6px;
+    margin-top: 16px;
+  }
+  input[type="email"], input[type="password"], input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  button {
+    width: 100%;
+    margin-top: 24px;
+    padding: 11px;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .msg {
+    margin-top: 16px;
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+  .msg.error { background: #fcebeb; color: var(--color-danger); }
+  .msg.success { background: #eaf3de; color: var(--color-success); }
+  .hidden { display: none !important; }
+  #app-root { min-height: 100vh; }
+  .app-shell { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 220px;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    padding: 20px 0;
+    flex-shrink: 0;
+  }
+  .sidebar .brand {
+    font-weight: 600;
+    font-size: 16px;
+    padding: 0 20px 16px;
+  }
+  .sidebar nav a {
+    display: block;
+    padding: 10px 20px;
+    color: var(--color-text);
+    text-decoration: none;
+    font-size: 14px;
+  }
+  .sidebar nav a:hover, .sidebar nav a.active {
+    background: var(--color-bg);
+  }
+  .main-content {
+    flex: 1;
+    padding: 32px;
+    overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== PANTALLA: LOGIN (magic link) ===================== -->
+<div id="screen-login" class="auth-wrap">
+  <div class="auth-card">
+    <h1>CARO GdE</h1>
+    <div class="subtitle">Gestión de empresas — HIDIVO</div>
+    <label for="login-email">Correo electrónico</label>
+    <input type="email" id="login-email" placeholder="tu@correo.com">
+    <button id="btn-send-magic-link">Enviar enlace de acceso</button>
+    <div id="login-msg"></div>
+  </div>
+</div>
+
+<!-- ===================== PANTALLA: COMPLETAR PERFIL ===================== -->
+<div id="screen-complete-profile" class="auth-wrap hidden">
+  <div class="auth-card">
+    <h1>Completa tu perfil</h1>
+    <div class="subtitle">Define tu nombre y una contraseña para tu cuenta</div>
+    <label for="complete-nombre">Nombre completo</label>
+    <input type="text" id="complete-nombre" placeholder="Tu nombre completo">
+    <label for="complete-password">Contraseña</label>
+    <input type="password" id="complete-password" placeholder="Mínimo 6 caracteres">
+    <button id="btn-complete-profile">Guardar y entrar</button>
+    <div id="complete-msg"></div>
+  </div>
+</div>
+
+<!-- ===================== APP PRINCIPAL ===================== -->
+<div id="screen-app" class="hidden">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">CARO GdE</div>
+      <nav id="main-nav">
+        <a href="#" data-module="servicios">Servicios</a>
+        <a href="#" data-module="clientes">Clientes</a>
+        <a href="#" data-module="proveedores">Proveedores</a>
+        <a href="#" data-module="proformas">Proformas</a>
+        <a href="#" data-module="contratos">Contratos</a>
+        <a href="#" data-module="cartera">Cartera</a>
+        <a href="#" data-module="tesoreria">Tesorería</a>
+        <a href="#" data-module="usuarios">Usuarios</a>
+        <a href="#" data-module="chat">Chat</a>
+      </nav>
+      <div style="padding: 20px; margin-top: auto;">
+        <button id="btn-logout" style="background: var(--color-border); color: var(--color-text);">Cerrar sesión</button>
+      </div>
+    </aside>
+    <main class="main-content" id="main-content">
+      <p>Selecciona un módulo del menú.</p>
+    </main>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// =====================================================================
+// CONFIGURACIÓN SUPABASE — CARO GdE
+// =====================================================================
+const SUPABASE_URL = 'https://dogsqwnmuslhtfwabvta.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvZ3Nxd25tdXNsaHRmd2FidnRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjc3NjQsImV4cCI6MjA5NzkwMzc2NH0.KDhWAKU89qLQDtmlDGhZw9Mr1dWflqhpWEgEZNsSBas';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// =====================================================================
+// UTILIDADES DE UI
+// =====================================================================
+function showScreen(screenId) {
+  ['screen-login', 'screen-complete-profile', 'screen-app'].forEach(id => {
+    document.getElementById(id).classList.toggle('hidden', id !== screenId);
+  });
+}
+
+function showMsg(elementId, text, type) {
+  const el = document.getElementById(elementId);
+  el.className = 'msg ' + type;
+  el.textContent = text;
+}
+
+function clearMsg(elementId) {
+  const el = document.getElementById(elementId);
+  el.className = '';
+  el.textContent = '';
+}
+
+// =====================================================================
+// LOGIN — ENVÍO DE MAGIC LINK
+// =====================================================================
+document.getElementById('btn-send-magic-link').addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value.trim();
+  clearMsg('login-msg');
+
+  if (!email) {
+    showMsg('login-msg', 'Ingresa tu correo electrónico.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-send-magic-link');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+
+  const { error } = await sb.auth.signInWithOtp({
+    email: email,
+    options: {
+      emailRedirectTo: window.location.origin + window.location.pathname
+    }
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Enviar enlace de acceso';
+
+  if (error) {
+    showMsg('login-msg', 'Error: ' + error.message, 'error');
+  } else {
+    showMsg('login-msg', 'Te enviamos un enlace de acceso a tu correo. Revisa tu bandeja de entrada.', 'success');
+  }
+});
+
+// =====================================================================
+// COMPLETAR PERFIL (primera vez que el usuario entra)
+// =====================================================================
+document.getElementById('btn-complete-profile').addEventListener('click', async () => {
+  const nombre = document.getElementById('complete-nombre').value.trim();
+  const password = document.getElementById('complete-password').value;
+  clearMsg('complete-msg');
+
+  if (!nombre || !password) {
+    showMsg('complete-msg', 'Completa todos los campos.', 'error');
+    return;
+  }
+  if (password.length < 6) {
+    showMsg('complete-msg', 'La contraseña debe tener al menos 6 caracteres.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-complete-profile');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  // Actualiza contraseña del usuario en Auth
+  const { data: userData, error: authError } = await sb.auth.updateUser({ password: password });
+
+  if (authError) {
+    btn.disabled = false;
+    btn.textContent = 'Guardar y entrar';
+    showMsg('complete-msg', 'Error: ' + authError.message, 'error');
+    return;
+  }
+
+  // Actualiza el nombre en la tabla perfiles
+  const { error: profileError } = await sb
+    .from('perfiles')
+    .update({ nombre_completo: nombre })
+    .eq('id', userData.user.id);
+
+  btn.disabled = false;
+  btn.textContent = 'Guardar y entrar';
+
+  if (profileError) {
+    showMsg('complete-msg', 'Error guardando perfil: ' + profileError.message, 'error');
+    return;
+  }
+
+  await loadAppShell();
+});
+
+// =====================================================================
+// LOGOUT
+// =====================================================================
+document.getElementById('btn-logout').addEventListener('click', async () => {
+  await sb.auth.signOut();
+  showScreen('screen-login');
+});
+
+// =====================================================================
+// NAVEGACIÓN ENTRE MÓDULOS (placeholder — se irá llenando módulo por módulo)
+// =====================================================================
+document.getElementById('main-nav').addEventListener('click', (e) => {
+  const link = e.target.closest('a');
+  if (!link) return;
+  e.preventDefault();
+
+  document.querySelectorAll('#main-nav a').forEach(a => a.classList.remove('active'));
+  link.classList.add('active');
+
+  const modulo = link.dataset.module;
+  document.getElementById('main-content').innerHTML =
+    '<h2 style="font-size:18px;font-weight:600;">' + link.textContent + '</h2>' +
+    '<p style="color:var(--color-text-muted);margin-top:8px;">Módulo en construcción.</p>';
+});
+
+// =====================================================================
+// FLUJO PRINCIPAL: determinar qué pantalla mostrar al cargar
+// =====================================================================
+async function loadAppShell() {
+  showScreen('screen-app');
+}
+
+async function checkProfileCompleteness(userId) {
+  const { data, error } = await sb
+    .from('perfiles')
+    .select('nombre_completo')
+    .eq('id', userId)
+    .single();
+
+  if (error) {
+    console.error('Error verificando perfil:', error);
+    return false;
+  }
+  return !!(data && data.nombre_completo);
+}
+
+async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+
+  if (!session) {
+    showScreen('screen-login');
+    return;
+  }
+
+  const isComplete = await checkProfileCompleteness(session.user.id);
+
+  if (isComplete) {
+    await loadAppShell();
+  } else {
+    showScreen('screen-complete-profile');
+  }
+}
+
+// Escucha cambios de sesión (ej. cuando el magic link confirma el login)
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN') {
+    init();
+  } else if (event === 'SIGNED_OUT') {
+    showScreen('screen-login');
+  }
+});
+
+init();
+</script>
+</body>
+</html>
