@@ -223,6 +223,96 @@
     font-size: 14px;
     background: white;
   }
+
+  /* ---- Proformas: modal grande con tabla de ítems ---- */
+  .modal-card.wide { max-width: 720px; }
+  .estado-select-inline {
+    width: auto;
+    display: inline-block;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  table.items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  table.items-table th {
+    text-align: left;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-weight: 500;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  table.items-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  table.items-table input, table.items-table select {
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  table.items-table .col-cantidad input,
+  table.items-table .col-precio input,
+  table.items-table .col-subtotal { width: 90px; }
+  table.items-table .col-subtotal {
+    text-align: right;
+    font-size: 13px;
+    padding-right: 8px;
+  }
+  table.items-table .col-eliminar {
+    width: 28px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--color-danger);
+  }
+  .totales-box {
+    margin-top: 16px;
+    padding: 14px 16px;
+    background: var(--color-bg);
+    border-radius: 8px;
+  }
+  .totales-box .fila {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 3px 0;
+  }
+  .totales-box .fila.total {
+    font-weight: 600;
+    font-size: 15px;
+    border-top: 1px solid var(--color-border);
+    margin-top: 6px;
+    padding-top: 8px;
+  }
+  .readonly-banner {
+    background: #faeeda;
+    color: #854f0b;
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+  }
+  .filter-pills {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .filter-pills button {
+    width: auto;
+    margin-top: 0;
+    padding: 6px 14px;
+    font-size: 13px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+  }
+  .filter-pills button.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+  }
 </style>
 </head>
 <body>
@@ -422,7 +512,8 @@ function renderModule(modulo) {
   const renderers = {
     servicios: renderServicios,
     clientes: renderClientes,
-    proveedores: renderProveedores
+    proveedores: renderProveedores,
+    proformas: renderProformas
   };
 
   if (renderers[modulo]) {
@@ -884,6 +975,380 @@ async function toggleActivoProveedor(id, activoActual) {
   if (error) { alert('Error: ' + error.message); return; }
   renderProveedores();
 }
+
+// =====================================================================
+// MÓDULO: PROFORMAS
+// =====================================================================
+const IVA_TASA = 0.15;
+const ESTADO_PROFORMA_LABELS = {
+  borrador: 'Borrador',
+  enviada: 'Enviada',
+  aprobada: 'Aprobada',
+  rechazada: 'Rechazada',
+  vencida: 'Vencida'
+};
+const ESTADO_PROFORMA_BADGE = {
+  borrador: 'inactivo',
+  enviada: 'inactivo',
+  aprobada: 'activo',
+  rechazada: 'inactivo',
+  vencida: 'inactivo'
+};
+
+let proformas_cache = [];
+let proformas_filtro_estado = 'todas';
+let modal_items = []; // ítems en edición dentro del modal abierto
+let modal_proforma_id = null;
+let modal_proforma_bloqueada = false;
+
+async function renderProformas() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Proformas</h2>
+      <button class="btn" onclick="abrirModalProforma()">+ Nueva proforma</button>
+    </div>
+    <div class="filter-pills" id="proformas-filtros">
+      <button data-estado="todas" class="active">Todas</button>
+      <button data-estado="borrador">Borrador</button>
+      <button data-estado="enviada">Enviada</button>
+      <button data-estado="aprobada">Aprobada</button>
+      <button data-estado="rechazada">Rechazada</button>
+      <button data-estado="vencida">Vencida</button>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Cliente</th>
+          <th>Fecha emisión</th>
+          <th>Total</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="proformas-tbody">
+        <tr><td colspan="6">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('proformas-filtros').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    document.querySelectorAll('#proformas-filtros button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    proformas_filtro_estado = btn.dataset.estado;
+    pintarProformas();
+  });
+
+  // Cargamos clientes en cache también, los necesitamos para el modal
+  if (!clientes_cache.length) {
+    const { data } = await sb.from('clientes').select('*').eq('activo', true);
+    clientes_cache = data || [];
+  }
+  if (!servicios_cache.length) {
+    const { data } = await sb.from('servicios').select('*').eq('activo', true);
+    servicios_cache = data || [];
+  }
+
+  const { data, error } = await sb
+    .from('proformas')
+    .select('*, clientes(razon_social)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    document.getElementById('proformas-tbody').innerHTML =
+      '<tr><td colspan="6">Error cargando proformas: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  proformas_cache = data;
+  pintarProformas();
+}
+
+function pintarProformas() {
+  const tbody = document.getElementById('proformas-tbody');
+  let lista = proformas_cache;
+  if (proformas_filtro_estado !== 'todas') {
+    lista = lista.filter(p => p.estado === proformas_filtro_estado);
+  }
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="6">No hay proformas en este filtro.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(p => `
+    <tr>
+      <td>${p.numero ?? '—'}</td>
+      <td>${escapeHtml(p.clientes?.razon_social) || '—'}</td>
+      <td>${p.fecha_emision || '—'}</td>
+      <td>$${Number(p.total || 0).toFixed(2)}</td>
+      <td><span class="badge ${ESTADO_PROFORMA_BADGE[p.estado] || 'inactivo'}">${ESTADO_PROFORMA_LABELS[p.estado] || p.estado}</span></td>
+      <td class="row-actions">
+        <a onclick="abrirModalProforma('${p.id}')">${p.estado === 'aprobada' ? 'Ver' : 'Editar'}</a>
+        ${p.estado === 'aprobada' ? `<a onclick="convertirAContrato('${p.id}')">Convertir a contrato</a>` : ''}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function abrirModalProforma(id) {
+  let proforma = null;
+  modal_items = [];
+  modal_proforma_id = id || null;
+  modal_proforma_bloqueada = false;
+
+  if (id) {
+    proforma = proformas_cache.find(p => p.id === id);
+    const { data: items, error } = await sb
+      .from('proforma_items')
+      .select('*')
+      .eq('proforma_id', id);
+    if (!error) modal_items = items || [];
+    modal_proforma_bloqueada = proforma?.estado === 'aprobada';
+  }
+
+  const esEdicion = !!proforma;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card wide">
+        <h3>${esEdicion ? 'Proforma ' + (proforma.numero ?? '') : 'Nueva proforma'}</h3>
+        ${modal_proforma_bloqueada ? '<div class="readonly-banner">Esta proforma está aprobada. Los ítems y montos quedaron congelados; solo puedes ver el detalle o convertirla a contrato.</div>' : ''}
+        <div class="field-row">
+          <div>
+            <label>Cliente</label>
+            <select id="prof-cliente" ${modal_proforma_bloqueada ? 'disabled' : ''}>
+              <option value="">Selecciona un cliente</option>
+              ${clientes_cache.map(c => `<option value="${c.id}" ${proforma?.cliente_id === c.id ? 'selected' : ''}>${escapeHtml(c.razon_social)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label>Estado</label>
+            <select id="prof-estado" onchange="onCambioEstadoProforma()">
+              ${Object.entries(ESTADO_PROFORMA_LABELS).map(([k, v]) =>
+                `<option value="${k}" ${(proforma?.estado || 'borrador') === k ? 'selected' : ''}>${v}</option>`
+              ).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div>
+            <label>Fecha de emisión</label>
+            <input type="date" id="prof-fecha-emision" value="${proforma?.fecha_emision || new Date().toISOString().slice(0,10)}" ${modal_proforma_bloqueada ? 'disabled' : ''}>
+          </div>
+          <div>
+            <label>Fecha de validez</label>
+            <input type="date" id="prof-fecha-validez" value="${proforma?.fecha_validez || ''}" ${modal_proforma_bloqueada ? 'disabled' : ''}>
+          </div>
+        </div>
+
+        <label style="margin-top:20px;">Ítems</label>
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>Servicio</th>
+              <th class="col-cantidad">Cant.</th>
+              <th class="col-precio">Precio unit.</th>
+              <th class="col-subtotal">Subtotal</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="prof-items-tbody"></tbody>
+        </table>
+        ${!modal_proforma_bloqueada ? '<button class="btn btn-secondary" style="margin-top:10px;" onclick="agregarItemProforma()">+ Agregar ítem</button>' : ''}
+
+        <div class="totales-box">
+          <div class="fila"><span>Subtotal</span><span id="prof-subtotal-display">$0.00</span></div>
+          <div class="fila"><span>IVA (15%)</span><span id="prof-iva-display">$0.00</span></div>
+          <div class="fila total"><span>Total</span><span id="prof-total-display">$0.00</span></div>
+        </div>
+
+        <div id="prof-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">${modal_proforma_bloqueada ? 'Cerrar' : 'Cancelar'}</button>
+          ${!modal_proforma_bloqueada ? `<button class="btn" onclick="guardarProforma()">Guardar</button>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (modal_items.length === 0 && !modal_proforma_bloqueada) {
+    agregarItemProforma();
+  } else {
+    pintarItemsProforma();
+  }
+}
+
+function onCambioEstadoProforma() {
+  // Si el usuario cambia el estado a "aprobada" desde el modal de una
+  // proforma nueva o en edición, solo afecta al guardar; el bloqueo
+  // visual de ítems se aplica la próxima vez que se abra ya aprobada.
+}
+
+function agregarItemProforma() {
+  modal_items.push({ servicio_id: '', descripcion: '', cantidad: 1, precio_unitario: 0 });
+  pintarItemsProforma();
+}
+
+function eliminarItemProforma(idx) {
+  modal_items.splice(idx, 1);
+  pintarItemsProforma();
+}
+
+function actualizarItemProforma(idx, campo, valor) {
+  modal_items[idx][campo] = valor;
+  if (campo === 'servicio_id') {
+    const serv = servicios_cache.find(s => s.id === valor);
+    if (serv) {
+      modal_items[idx].precio_unitario = serv.tarifa_referencial || 0;
+      modal_items[idx].descripcion = serv.nombre;
+    }
+  }
+  pintarItemsProforma();
+}
+
+function pintarItemsProforma() {
+  const tbody = document.getElementById('prof-items-tbody');
+  if (!tbody) return;
+
+  tbody.innerHTML = modal_items.map((item, idx) => {
+    const subtotal = (parseFloat(item.cantidad) || 0) * (parseFloat(item.precio_unitario) || 0);
+    if (modal_proforma_bloqueada) {
+      return `
+        <tr>
+          <td>${escapeHtml(item.descripcion)}</td>
+          <td class="col-cantidad">${item.cantidad}</td>
+          <td class="col-precio">$${Number(item.precio_unitario).toFixed(2)}</td>
+          <td class="col-subtotal">$${subtotal.toFixed(2)}</td>
+          <td></td>
+        </tr>
+      `;
+    }
+    return `
+      <tr>
+        <td>
+          <select onchange="actualizarItemProforma(${idx}, 'servicio_id', this.value)">
+            <option value="">Selecciona...</option>
+            ${servicios_cache.map(s => `<option value="${s.id}" ${item.servicio_id === s.id ? 'selected' : ''}>${escapeHtml(s.nombre)}</option>`).join('')}
+          </select>
+        </td>
+        <td class="col-cantidad">
+          <input type="text" value="${item.cantidad}" onchange="actualizarItemProforma(${idx}, 'cantidad', this.value)">
+        </td>
+        <td class="col-precio">
+          <input type="text" value="${item.precio_unitario}" onchange="actualizarItemProforma(${idx}, 'precio_unitario', this.value)">
+        </td>
+        <td class="col-subtotal">$${subtotal.toFixed(2)}</td>
+        <td class="col-eliminar" onclick="eliminarItemProforma(${idx})">✕</td>
+      </tr>
+    `;
+  }).join('');
+
+  calcularTotalesProforma();
+}
+
+function calcularTotalesProforma() {
+  const subtotal = modal_items.reduce((acc, item) =>
+    acc + (parseFloat(item.cantidad) || 0) * (parseFloat(item.precio_unitario) || 0), 0);
+  const iva = subtotal * IVA_TASA;
+  const total = subtotal + iva;
+
+  document.getElementById('prof-subtotal-display').textContent = '$' + subtotal.toFixed(2);
+  document.getElementById('prof-iva-display').textContent = '$' + iva.toFixed(2);
+  document.getElementById('prof-total-display').textContent = '$' + total.toFixed(2);
+
+  return { subtotal, iva, total };
+}
+
+async function guardarProforma() {
+  const clienteId = document.getElementById('prof-cliente').value;
+  const estado = document.getElementById('prof-estado').value;
+  const fechaEmision = document.getElementById('prof-fecha-emision').value;
+  const fechaValidez = document.getElementById('prof-fecha-validez').value;
+
+  if (!clienteId) {
+    showMsg('prof-msg', 'Selecciona un cliente.', 'error');
+    return;
+  }
+  if (modal_items.length === 0 || modal_items.some(i => !i.servicio_id)) {
+    showMsg('prof-msg', 'Agrega al menos un ítem y selecciona el servicio en cada línea.', 'error');
+    return;
+  }
+
+  const { subtotal, iva, total } = calcularTotalesProforma();
+
+  const payload = {
+    cliente_id: clienteId,
+    estado: estado,
+    fecha_emision: fechaEmision || null,
+    fecha_validez: fechaValidez || null,
+    subtotal: subtotal,
+    iva: iva,
+    total: total
+  };
+
+  let proformaId = modal_proforma_id;
+
+  if (proformaId) {
+    const { error } = await sb.from('proformas').update(payload).eq('id', proformaId);
+    if (error) { showMsg('prof-msg', 'Error: ' + error.message, 'error'); return; }
+  } else {
+    // Calcular siguiente número correlativo
+    const maxNumero = proformas_cache.reduce((max, p) => Math.max(max, p.numero || 0), 0);
+    payload.numero = maxNumero + 1;
+    const { data, error } = await sb.from('proformas').insert(payload).select().single();
+    if (error) { showMsg('prof-msg', 'Error: ' + error.message, 'error'); return; }
+    proformaId = data.id;
+  }
+
+  // Reescribir los ítems: borrar los anteriores y volver a insertar
+  // (más simple y confiable que diffear altas/bajas/cambios)
+  await sb.from('proforma_items').delete().eq('proforma_id', proformaId);
+
+  const itemsPayload = modal_items.map(item => ({
+    proforma_id: proformaId,
+    servicio_id: item.servicio_id,
+    descripcion: item.descripcion,
+    cantidad: parseFloat(item.cantidad) || 0,
+    precio_unitario: parseFloat(item.precio_unitario) || 0,
+    subtotal: (parseFloat(item.cantidad) || 0) * (parseFloat(item.precio_unitario) || 0)
+  }));
+
+  const { error: itemsError } = await sb.from('proforma_items').insert(itemsPayload);
+  if (itemsError) {
+    showMsg('prof-msg', 'Proforma guardada, pero hubo un error con los ítems: ' + itemsError.message, 'error');
+    return;
+  }
+
+  closeModal();
+  renderProformas();
+}
+
+async function convertirAContrato(proformaId) {
+  const proforma = proformas_cache.find(p => p.id === proformaId);
+  if (!proforma) return;
+
+  if (!confirm('¿Convertir la proforma ' + (proforma.numero ?? '') + ' en un contrato? Esto creará un nuevo contrato vigente con el monto total de la proforma.')) {
+    return;
+  }
+
+  const payload = {
+    cliente_id: proforma.cliente_id,
+    proforma_origen_id: proforma.id,
+    monto_total: proforma.total,
+    estado: 'vigente'
+  };
+
+  const { data, error } = await sb.from('contratos').insert(payload).select().single();
+  if (error) {
+    alert('Error al crear el contrato: ' + error.message);
+    return;
+  }
+
+  alert('Contrato creado correctamente. Podrás verlo en el módulo de Contratos.');
+  renderProformas();
+}
+
 
 
 // =====================================================================
