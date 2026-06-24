@@ -718,6 +718,14 @@
     margin-top: 3px;
     padding-left: 4px;
   }
+
+  /* ---- Usuarios ---- */
+  .badge.rol-admin { background: #eeedfe; color: #3c3489; }
+  .badge.rol-ventas { background: #e6f1fb; color: #0c447c; }
+  .badge.rol-finanzas { background: #eaf3de; color: #3b6d11; }
+  .badge.rol-rrhh { background: #faeeda; color: #854f0b; }
+  .badge.rol-lectura { background: #f1efe8; color: #5f5e5a; }
+  .badge.rol-sin-asignar { background: #fcebeb; color: #a32d2d; }
 </style>
 </head>
 <body>
@@ -922,7 +930,8 @@ function renderModule(modulo) {
     contratos: renderContratos,
     cartera: renderCartera,
     tesoreria: renderTesoreria,
-    chat: renderChat
+    chat: renderChat,
+    usuarios: renderUsuarios
   };
 
   if (renderers[modulo]) {
@@ -3635,6 +3644,207 @@ function suscribirPresenciaChat() {
       cargarPresenciaChat();
     })
     .subscribe();
+}
+
+// =====================================================================
+// MÓDULO: USUARIOS
+// =====================================================================
+const ROL_LABELS = {
+  admin: 'Administrador',
+  ventas: 'Ventas',
+  finanzas: 'Finanzas',
+  rrhh: 'RRHH',
+  lectura: 'Lectura'
+};
+let usuarios_cache = [];
+let usuario_actual_rol = null;
+
+async function renderUsuarios() {
+  const main = document.getElementById('main-content');
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: miPerfil } = await sb.from('perfiles').select('rol').eq('id', user.id).single();
+  usuario_actual_rol = miPerfil?.rol;
+
+  const esAdmin = usuario_actual_rol === 'admin';
+
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Usuarios</h2>
+      ${esAdmin ? '<button class="btn" onclick="abrirModalInvitarUsuario()">+ Invitar usuario</button>' : ''}
+    </div>
+    ${!esAdmin ? '<div class="readonly-banner">Solo un administrador puede invitar usuarios o cambiar roles. Puedes ver la lista, pero no editarla.</div>' : ''}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Correo</th>
+          <th>Rol</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="usuarios-tbody">
+        <tr><td colspan="5">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  const { data, error } = await sb.from('perfiles').select('*').order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('usuarios-tbody').innerHTML =
+      '<tr><td colspan="5">Error cargando usuarios: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  usuarios_cache = data;
+  pintarUsuarios(esAdmin);
+}
+
+function pintarUsuarios(esAdmin) {
+  const tbody = document.getElementById('usuarios-tbody');
+  if (!usuarios_cache.length) {
+    tbody.innerHTML = '<tr><td colspan="5">No hay usuarios registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = usuarios_cache.map(u => {
+    const rolBadge = u.rol ? 'rol-' + u.rol : 'rol-sin-asignar';
+    const rolTexto = u.rol ? ROL_LABELS[u.rol] || u.rol : 'Sin asignar';
+    return `
+      <tr>
+        <td>${escapeHtml(u.nombre_completo) || '—'}</td>
+        <td>${escapeHtml(u.email)}</td>
+        <td><span class="badge ${rolBadge}">${rolTexto}</span></td>
+        <td><span class="badge ${u.activo ? 'activo' : 'inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+        <td class="row-actions">
+          ${esAdmin ? `<a onclick="abrirModalEditarUsuario('${u.id}')">Editar</a>` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function abrirModalEditarUsuario(id) {
+  const usuario = usuarios_cache.find(u => u.id === id);
+  if (!usuario) return;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>${escapeHtml(usuario.nombre_completo) || escapeHtml(usuario.email)}</h3>
+        <label>Correo</label>
+        <input type="text" value="${escapeHtml(usuario.email)}" disabled>
+        <label>Rol</label>
+        <select id="user-rol">
+          <option value="">Sin asignar</option>
+          ${Object.entries(ROL_LABELS).map(([k, v]) =>
+            `<option value="${k}" ${usuario.rol === k ? 'selected' : ''}>${v}</option>`
+          ).join('')}
+        </select>
+        <div id="user-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-secondary" onclick="toggleActivoUsuario('${id}', ${usuario.activo})">${usuario.activo ? 'Desactivar' : 'Activar'}</button>
+          <button class="btn" onclick="guardarRolUsuario('${id}')">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarRolUsuario(id) {
+  const rol = document.getElementById('user-rol').value || null;
+
+  // Salvaguarda: evitar que el único admin se quite a sí mismo el rol
+  // por accidente y quede el sistema sin nadie que pueda gestionar usuarios.
+  const esUnoMismo = usuarios_cache.find(u => u.id === id)?.email === chat_usuario_actual?.email;
+  if (esUnoMismo && rol !== 'admin') {
+    const otrosAdmins = usuarios_cache.filter(u => u.rol === 'admin' && u.id !== id);
+    if (otrosAdmins.length === 0) {
+      showMsg('user-msg', 'No puedes quitarte el rol de admin si eres el único administrador del sistema.', 'error');
+      return;
+    }
+  }
+
+  const { error } = await sb.from('perfiles').update({ rol: rol }).eq('id', id);
+  if (error) {
+    showMsg('user-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  renderUsuarios();
+}
+
+async function toggleActivoUsuario(id, activoActual) {
+  const { error } = await sb.from('perfiles').update({ activo: !activoActual }).eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  closeModal();
+  renderUsuarios();
+}
+
+function abrirModalInvitarUsuario() {
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>Invitar nuevo usuario</h3>
+        <label>Correo electrónico</label>
+        <input type="email" id="invitar-email" placeholder="nombre@hidivo.com">
+        <p style="font-size:12px;color:var(--color-text-muted);margin-top:8px;">
+          Se le enviará un correo de invitación. Al aceptarlo, podrá completar su perfil y definir su contraseña.
+        </p>
+        <div id="invitar-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" id="btn-confirmar-invitar" onclick="enviarInvitacion()">Enviar invitación</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function enviarInvitacion() {
+  const email = document.getElementById('invitar-email').value.trim();
+  if (!email) {
+    showMsg('invitar-msg', 'Ingresa un correo electrónico.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-confirmar-invitar');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+
+  const { data: { session } } = await sb.auth.getSession();
+
+  try {
+    const response = await fetch(SUPABASE_URL + '/functions/v1/invitar-usuario', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + session.access_token
+      },
+      body: JSON.stringify({
+        email: email,
+        redirectTo: window.location.origin + window.location.pathname
+      })
+    });
+
+    const result = await response.json();
+
+    btn.disabled = false;
+    btn.textContent = 'Enviar invitación';
+
+    if (!response.ok) {
+      showMsg('invitar-msg', 'Error: ' + (result.error || 'No se pudo enviar la invitación.'), 'error');
+      return;
+    }
+
+    showMsg('invitar-msg', 'Invitación enviada correctamente a ' + email + '.', 'success');
+    setTimeout(() => { closeModal(); renderUsuarios(); }, 1500);
+
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Enviar invitación';
+    showMsg('invitar-msg', 'Error de conexión: ' + err.message, 'error');
+  }
 }
 
 init();
