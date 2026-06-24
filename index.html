@@ -513,6 +513,107 @@
     font-size: 12px;
   }
   .nomina-detalle-row input { padding: 6px 8px; font-size: 13px; }
+
+  /* ---- Chat ---- */
+  .chat-shell {
+    display: flex;
+    height: calc(100vh - 64px);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .chat-sidebar {
+    width: 220px;
+    border-right: 1px solid var(--color-border);
+    padding: 16px 0;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .chat-sidebar h4 {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    padding: 0 16px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .chat-canal-item {
+    padding: 9px 16px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .chat-canal-item.active { background: var(--color-bg); font-weight: 500; }
+  .chat-presencia-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    font-size: 13px;
+  }
+  .chat-presencia-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 100px;
+    background: var(--color-border);
+    flex-shrink: 0;
+  }
+  .chat-presencia-dot.online { background: var(--color-success); }
+  .chat-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-bubble {
+    max-width: 60%;
+    padding: 9px 13px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .chat-bubble.mine {
+    align-self: flex-end;
+    background: var(--color-primary);
+    color: white;
+  }
+  .chat-bubble.theirs {
+    align-self: flex-start;
+    background: var(--color-bg);
+  }
+  .chat-bubble .autor {
+    font-size: 11px;
+    font-weight: 500;
+    margin-bottom: 3px;
+    opacity: 0.8;
+  }
+  .chat-bubble .hora {
+    font-size: 10px;
+    opacity: 0.6;
+    margin-top: 3px;
+    text-align: right;
+  }
+  .chat-input-bar {
+    display: flex;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--color-border);
+  }
+  .chat-input-bar input {
+    flex: 1;
+  }
+  .chat-input-bar button {
+    width: auto;
+    margin-top: 0;
+    padding: 10px 20px;
+  }
 </style>
 </head>
 <body>
@@ -716,7 +817,8 @@ function renderModule(modulo) {
     proformas: renderProformas,
     contratos: renderContratos,
     cartera: renderCartera,
-    tesoreria: renderTesoreria
+    tesoreria: renderTesoreria,
+    chat: renderChat
   };
 
   if (renderers[modulo]) {
@@ -3058,6 +3160,204 @@ async function pagarRolNomina() {
   alert('Nómina pagada correctamente. Se generaron ' + modal_rol_detalle.length + ' movimientos de egreso en Tesorería.');
   closeModal();
   renderTabNomina();
+}
+
+// =====================================================================
+// MÓDULO: CHAT
+// =====================================================================
+let chat_canal_id = null;
+let chat_mensajes_cache = [];
+let chat_perfiles_cache = {}; // id -> perfil, para mostrar nombres y presencia
+let chat_realtime_channel = null;
+let chat_presencia_channel = null;
+let chat_usuario_actual = null;
+
+async function renderChat() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="chat-shell">
+      <aside class="chat-sidebar">
+        <h4>Canales</h4>
+        <div class="chat-canal-item active">General</div>
+        <h4 style="margin-top:24px;">En línea ahora</h4>
+        <div id="chat-presencia-lista"></div>
+      </aside>
+      <div class="chat-main">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-bar">
+          <input type="text" id="chat-input" placeholder="Escribe un mensaje...">
+          <button class="btn" onclick="enviarMensajeChat()">Enviar</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') enviarMensajeChat();
+  });
+
+  const { data: { user } } = await sb.auth.getUser();
+  chat_usuario_actual = user;
+
+  // Cargar todos los perfiles (para mostrar nombres en mensajes y presencia)
+  const { data: perfiles } = await sb.from('perfiles').select('id, nombre_completo, email');
+  (perfiles || []).forEach(p => { chat_perfiles_cache[p.id] = p; });
+
+  // Asegurar que exista el canal "General"
+  let { data: canal } = await sb.from('canales_chat').select('*').eq('tipo', 'general').maybeSingle();
+  if (!canal) {
+    const { data: nuevoCanal } = await sb
+      .from('canales_chat')
+      .insert({ nombre: 'General', tipo: 'general' })
+      .select()
+      .single();
+    canal = nuevoCanal;
+  }
+  chat_canal_id = canal.id;
+
+  await cargarMensajesChat();
+  await marcarPresenciaEnLinea();
+  suscribirRealtimeChat();
+  suscribirPresenciaChat();
+}
+
+async function cargarMensajesChat() {
+  const { data, error } = await sb
+    .from('mensajes')
+    .select('*')
+    .eq('canal_id', chat_canal_id)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    document.getElementById('chat-messages').innerHTML =
+      '<p style="color:var(--color-danger);">Error cargando mensajes: ' + escapeHtml(error.message) + '</p>';
+    return;
+  }
+  chat_mensajes_cache = data || [];
+  pintarMensajesChat();
+}
+
+function pintarMensajesChat() {
+  const cont = document.getElementById('chat-messages');
+  if (!cont) return;
+
+  if (!chat_mensajes_cache.length) {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Aún no hay mensajes en este canal. ¡Sé el primero en escribir!</p>';
+    return;
+  }
+
+  cont.innerHTML = chat_mensajes_cache.map(m => {
+    const esMio = m.autor_id === chat_usuario_actual?.id;
+    const autor = chat_perfiles_cache[m.autor_id];
+    const nombreAutor = autor?.nombre_completo || autor?.email || 'Usuario';
+    const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) : '';
+    return `
+      <div class="chat-bubble ${esMio ? 'mine' : 'theirs'}">
+        ${!esMio ? '<div class="autor">' + escapeHtml(nombreAutor) + '</div>' : ''}
+        <div>${escapeHtml(m.contenido)}</div>
+        <div class="hora">${hora}</div>
+      </div>
+    `;
+  }).join('');
+
+  cont.scrollTop = cont.scrollHeight;
+}
+
+async function enviarMensajeChat() {
+  const input = document.getElementById('chat-input');
+  const contenido = input.value.trim();
+  if (!contenido) return;
+
+  input.value = '';
+
+  const { error } = await sb.from('mensajes').insert({
+    canal_id: chat_canal_id,
+    autor_id: chat_usuario_actual.id,
+    contenido: contenido
+  });
+
+  if (error) {
+    alert('Error enviando mensaje: ' + error.message);
+  }
+  // No recargamos manualmente — el mensaje propio también llega vía
+  // la suscripción Realtime, igual que los de otros usuarios.
+}
+
+function suscribirRealtimeChat() {
+  if (chat_realtime_channel) {
+    sb.removeChannel(chat_realtime_channel);
+  }
+
+  chat_realtime_channel = sb
+    .channel('mensajes-canal-' + chat_canal_id)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'mensajes',
+      filter: 'canal_id=eq.' + chat_canal_id
+    }, (payload) => {
+      chat_mensajes_cache.push(payload.new);
+      pintarMensajesChat();
+    })
+    .subscribe();
+}
+
+async function marcarPresenciaEnLinea() {
+  await sb.from('presencia').upsert({
+    perfil_id: chat_usuario_actual.id,
+    en_linea: true,
+    ultima_actividad: new Date().toISOString()
+  });
+
+  // Marcar como desconectado al cerrar la pestaña/navegar fuera
+  window.addEventListener('beforeunload', () => {
+    sb.from('presencia').update({ en_linea: false }).eq('perfil_id', chat_usuario_actual.id);
+  });
+
+  await cargarPresenciaChat();
+}
+
+async function cargarPresenciaChat() {
+  const { data } = await sb.from('presencia').select('*').eq('en_linea', true);
+  pintarPresenciaChat(data || []);
+}
+
+function pintarPresenciaChat(lista) {
+  const cont = document.getElementById('chat-presencia-lista');
+  if (!cont) return;
+
+  if (!lista.length) {
+    cont.innerHTML = '<p style="font-size:12px;color:var(--color-text-muted);padding:0 16px;">Nadie en línea.</p>';
+    return;
+  }
+
+  cont.innerHTML = lista.map(p => {
+    const perfil = chat_perfiles_cache[p.perfil_id];
+    const nombre = perfil?.nombre_completo || perfil?.email || 'Usuario';
+    return `
+      <div class="chat-presencia-item">
+        <span class="chat-presencia-dot online"></span>
+        <span>${escapeHtml(nombre)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function suscribirPresenciaChat() {
+  if (chat_presencia_channel) {
+    sb.removeChannel(chat_presencia_channel);
+  }
+
+  chat_presencia_channel = sb
+    .channel('presencia-global')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'presencia'
+    }, () => {
+      cargarPresenciaChat();
+    })
+    .subscribe();
 }
 
 init();
