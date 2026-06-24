@@ -449,6 +449,70 @@
     font-weight: 600;
     margin-top: 4px;
   }
+
+  /* ---- Tesorería ---- */
+  .cuentas-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .cuenta-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .cuenta-card .nombre { font-size: 14px; font-weight: 500; }
+  .cuenta-card .banco { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+  .cuenta-card .saldo { font-size: 22px; font-weight: 600; margin-top: 10px; }
+  .cuenta-card.add-new {
+    border-style: dashed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 14px;
+  }
+  .subtabs-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .subtabs-bar button {
+    width: auto;
+    margin-top: 0;
+    padding: 8px 16px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    font-size: 13px;
+  }
+  .subtabs-bar button.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+  }
+  .badge.mov-ingreso { background: #eaf3de; color: #3b6d11; }
+  .badge.mov-egreso { background: #fcebeb; color: #a32d2d; }
+  .monto-ingreso { color: var(--color-success); font-weight: 500; }
+  .monto-egreso { color: var(--color-danger); font-weight: 500; }
+  .nomina-detalle-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 13px;
+  }
+  .nomina-detalle-row.header {
+    font-weight: 500;
+    color: var(--color-text-muted);
+    font-size: 12px;
+  }
+  .nomina-detalle-row input { padding: 6px 8px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -651,7 +715,8 @@ function renderModule(modulo) {
     proveedores: renderProveedores,
     proformas: renderProformas,
     contratos: renderContratos,
-    cartera: renderCartera
+    cartera: renderCartera,
+    tesoreria: renderTesoreria
   };
 
   if (renderers[modulo]) {
@@ -1978,6 +2043,10 @@ async function renderCartera() {
     const { data } = await sb.from('contratos').select('*, clientes(razon_social)');
     contratos_cache = data || [];
   }
+  if (!cuentas_bancarias_cache.length) {
+    const { data } = await sb.from('cuentas_bancarias').select('*');
+    cuentas_bancarias_cache = data || [];
+  }
 
   const { data, error } = await sb
     .from('cartera_documentos')
@@ -2116,6 +2185,15 @@ function pintarModalCartera(doc) {
             <div>
               <input type="date" id="cart-abono-fecha" value="${new Date().toISOString().slice(0,10)}">
             </div>
+          </div>
+          <label>Cuenta bancaria que ${doc.tipo === 'por_cobrar' ? 'recibe' : 'realiza'} el movimiento</label>
+          <div class="field-row">
+            <div>
+              <select id="cart-abono-cuenta">
+                <option value="">Selecciona una cuenta...</option>
+                ${cuentas_bancarias_cache.map(c => `<option value="${c.id}">${escapeHtml(c.nombre)} — ${escapeHtml(c.banco)}</option>`).join('')}
+              </select>
+            </div>
             <div style="flex:0;">
               <button class="btn" style="width:auto;white-space:nowrap;" onclick="registrarAbono()">Registrar</button>
             </div>
@@ -2242,9 +2320,14 @@ function pintarAbonosLista() {
 async function registrarAbono() {
   const monto = parseFloat(document.getElementById('cart-abono-monto').value) || 0;
   const fecha = document.getElementById('cart-abono-fecha').value;
+  const cuentaId = document.getElementById('cart-abono-cuenta').value;
 
   if (monto <= 0) {
     showMsg('cart-msg', 'Ingresa un monto de abono válido.', 'error');
+    return;
+  }
+  if (!cuentaId) {
+    showMsg('cart-msg', 'Selecciona la cuenta bancaria del movimiento.', 'error');
     return;
   }
 
@@ -2254,19 +2337,49 @@ async function registrarAbono() {
     return;
   }
 
-  // Nota: movimiento_tesoreria_id queda en null por ahora — se vinculará
-  // cuando se construya el módulo de Tesorería.
-  const { error: abonoError } = await sb.from('cartera_abonos').insert({
-    documento_id: modal_cartera_id,
-    fecha: fecha || new Date().toISOString().slice(0, 10),
-    monto: monto
-  });
+  const fechaFinal = fecha || new Date().toISOString().slice(0, 10);
+  const esIngreso = doc.tipo === 'por_cobrar';
 
-  if (abonoError) {
-    showMsg('cart-msg', 'Error registrando abono: ' + abonoError.message, 'error');
+  // 1. Crear el movimiento de Tesorería correspondiente
+  const { data: movimiento, error: movError } = await sb
+    .from('tesoreria_movimientos')
+    .insert({
+      cuenta_id: cuentaId,
+      tipo: esIngreso ? 'ingreso' : 'egreso',
+      origen: esIngreso ? 'cartera_cxc' : 'cartera_cxp',
+      origen_id: modal_cartera_id,
+      monto: monto,
+      fecha: fechaFinal,
+      descripcion: doc.concepto
+    })
+    .select()
+    .single();
+
+  if (movError) {
+    showMsg('cart-msg', 'Error creando el movimiento de tesorería: ' + movError.message, 'error');
     return;
   }
 
+  // 2. Registrar el abono, vinculado al movimiento recién creado
+  const { error: abonoError } = await sb.from('cartera_abonos').insert({
+    documento_id: modal_cartera_id,
+    fecha: fechaFinal,
+    monto: monto,
+    movimiento_tesoreria_id: movimiento.id
+  });
+
+  if (abonoError) {
+    showMsg('cart-msg', 'El movimiento de tesorería se creó, pero hubo un error registrando el abono: ' + abonoError.message, 'error');
+    return;
+  }
+
+  // 3. Actualizar saldo de la cuenta bancaria
+  const cuenta = cuentas_bancarias_cache.find(c => c.id === cuentaId);
+  const nuevoSaldoCuenta = Number(cuenta.saldo_actual || 0) + (esIngreso ? monto : -monto);
+  await sb.from('cuentas_bancarias').update({ saldo_actual: nuevoSaldoCuenta }).eq('id', cuentaId);
+  cuenta.saldo_actual = nuevoSaldoCuenta;
+
+  // 4. Actualizar saldo y estado del documento de cartera
   const nuevoSaldo = doc.saldo_pendiente - monto;
   const nuevoEstado = nuevoSaldo <= 0 ? 'pagado' : 'parcial';
 
@@ -2280,7 +2393,6 @@ async function registrarAbono() {
     return;
   }
 
-  // Refrescar cache local y volver a pintar el modal con datos actualizados
   doc.saldo_pendiente = nuevoSaldo;
   doc.estado = nuevoEstado;
 
@@ -2292,6 +2404,660 @@ async function registrarAbono() {
   modal_cartera_abonos = data || [];
 
   pintarModalCartera(doc);
+}
+
+// =====================================================================
+// MÓDULO: TESORERÍA (Cuentas, Movimientos, Nómina)
+// =====================================================================
+let cuentas_bancarias_cache = [];
+let movimientos_cache = [];
+let tesoreria_subtab = 'movimientos';
+
+async function renderTesoreria() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Tesorería</h2>
+    </div>
+    <div class="subtabs-bar" id="tesoreria-subtabs">
+      <button data-tab="movimientos" class="active">Movimientos</button>
+      <button data-tab="nomina">Nómina</button>
+    </div>
+    <div id="tesoreria-content"></div>
+  `;
+
+  document.getElementById('tesoreria-subtabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    document.querySelectorAll('#tesoreria-subtabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    tesoreria_subtab = btn.dataset.tab;
+    if (tesoreria_subtab === 'movimientos') renderTabMovimientos();
+    else renderTabNomina();
+  });
+
+  const { data: cuentas } = await sb.from('cuentas_bancarias').select('*').order('created_at');
+  cuentas_bancarias_cache = cuentas || [];
+
+  renderTabMovimientos();
+}
+
+// ---- Sub-tab: Movimientos ----
+
+async function renderTabMovimientos() {
+  const content = document.getElementById('tesoreria-content');
+  content.innerHTML = `
+    <div class="cuentas-grid" id="cuentas-grid"></div>
+    <div class="module-header">
+      <h2 style="font-size:15px;">Historial de movimientos</h2>
+      <button class="btn" onclick="abrirModalMovimiento()">+ Nuevo movimiento</button>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Cuenta</th>
+          <th>Tipo</th>
+          <th>Origen</th>
+          <th>Descripción</th>
+          <th>Monto</th>
+        </tr>
+      </thead>
+      <tbody id="movimientos-tbody">
+        <tr><td colspan="6">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  pintarCuentasGrid();
+
+  const { data, error } = await sb
+    .from('tesoreria_movimientos')
+    .select('*, cuentas_bancarias(nombre)')
+    .order('fecha', { ascending: false });
+
+  if (error) {
+    document.getElementById('movimientos-tbody').innerHTML =
+      '<tr><td colspan="6">Error cargando movimientos: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  movimientos_cache = data;
+  pintarMovimientos();
+}
+
+const ORIGEN_MOV_LABELS = { cartera_cxc: 'Cobro de cartera', cartera_cxp: 'Pago a proveedor', nomina: 'Nómina', otro: 'Otro' };
+
+function pintarCuentasGrid() {
+  const grid = document.getElementById('cuentas-grid');
+  grid.innerHTML = cuentas_bancarias_cache.map(c => `
+    <div class="cuenta-card">
+      <div class="nombre">${escapeHtml(c.nombre)}</div>
+      <div class="banco">${escapeHtml(c.banco)} ${escapeHtml(c.numero_cuenta)}</div>
+      <div class="saldo">$${Number(c.saldo_actual || 0).toFixed(2)}</div>
+    </div>
+  `).join('') + `
+    <div class="cuenta-card add-new" onclick="abrirModalCuenta()">+ Agregar cuenta bancaria</div>
+  `;
+}
+
+function pintarMovimientos() {
+  const tbody = document.getElementById('movimientos-tbody');
+  if (!movimientos_cache.length) {
+    tbody.innerHTML = '<tr><td colspan="6">No hay movimientos registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = movimientos_cache.map(m => `
+    <tr>
+      <td>${m.fecha || '—'}</td>
+      <td>${escapeHtml(m.cuentas_bancarias?.nombre) || '—'}</td>
+      <td><span class="badge mov-${m.tipo}">${m.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}</span></td>
+      <td>${ORIGEN_MOV_LABELS[m.origen] || m.origen || '—'}</td>
+      <td>${escapeHtml(m.descripcion) || '—'}</td>
+      <td class="monto-${m.tipo}">${m.tipo === 'ingreso' ? '+' : '-'}$${Number(m.monto || 0).toFixed(2)}</td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalCuenta() {
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>Nueva cuenta bancaria</h3>
+        <label>Nombre</label>
+        <input type="text" id="cuenta-nombre" placeholder="ej. Banco Pichincha - Cta Cte">
+        <label>Banco</label>
+        <input type="text" id="cuenta-banco" placeholder="ej. Banco Pichincha">
+        <label>Número de cuenta</label>
+        <input type="text" id="cuenta-numero" placeholder="ej. 1234567890">
+        <label>Saldo inicial</label>
+        <input type="text" id="cuenta-saldo" placeholder="0.00">
+        <div id="cuenta-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarCuenta()">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarCuenta() {
+  const nombre = document.getElementById('cuenta-nombre').value.trim();
+  if (!nombre) {
+    showMsg('cuenta-msg', 'El nombre es obligatorio.', 'error');
+    return;
+  }
+  const payload = {
+    nombre: nombre,
+    banco: document.getElementById('cuenta-banco').value.trim(),
+    numero_cuenta: document.getElementById('cuenta-numero').value.trim(),
+    saldo_actual: parseFloat(document.getElementById('cuenta-saldo').value) || 0
+  };
+  const { error } = await sb.from('cuentas_bancarias').insert(payload);
+  if (error) {
+    showMsg('cuenta-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  renderTesoreria();
+}
+
+function abrirModalMovimiento() {
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>Nuevo movimiento</h3>
+        <div class="field-row">
+          <div>
+            <label>Tipo</label>
+            <select id="mov-tipo">
+              <option value="ingreso">Ingreso</option>
+              <option value="egreso">Egreso</option>
+            </select>
+          </div>
+          <div>
+            <label>Cuenta</label>
+            <select id="mov-cuenta">
+              ${cuentas_bancarias_cache.map(c => `<option value="${c.id}">${escapeHtml(c.nombre)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <label>Descripción</label>
+        <input type="text" id="mov-descripcion" placeholder="ej. Pago de servicios básicos de oficina">
+        <div class="field-row">
+          <div>
+            <label>Monto</label>
+            <input type="text" id="mov-monto" placeholder="0.00">
+          </div>
+          <div>
+            <label>Fecha</label>
+            <input type="date" id="mov-fecha" value="${new Date().toISOString().slice(0,10)}">
+          </div>
+        </div>
+        <div id="mov-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarMovimiento()">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarMovimiento() {
+  const cuentaId = document.getElementById('mov-cuenta').value;
+  const tipo = document.getElementById('mov-tipo').value;
+  const monto = parseFloat(document.getElementById('mov-monto').value) || 0;
+  const fecha = document.getElementById('mov-fecha').value;
+
+  if (!cuentaId) { showMsg('mov-msg', 'Selecciona una cuenta.', 'error'); return; }
+  if (monto <= 0) { showMsg('mov-msg', 'Ingresa un monto válido.', 'error'); return; }
+
+  const { error } = await sb.from('tesoreria_movimientos').insert({
+    cuenta_id: cuentaId,
+    tipo: tipo,
+    origen: 'otro',
+    monto: monto,
+    fecha: fecha || null,
+    descripcion: document.getElementById('mov-descripcion').value.trim()
+  });
+
+  if (error) {
+    showMsg('mov-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+
+  const cuenta = cuentas_bancarias_cache.find(c => c.id === cuentaId);
+  const nuevoSaldo = Number(cuenta.saldo_actual || 0) + (tipo === 'ingreso' ? monto : -monto);
+  await sb.from('cuentas_bancarias').update({ saldo_actual: nuevoSaldo }).eq('id', cuentaId);
+
+  closeModal();
+  renderTesoreria();
+}
+
+// ---- Sub-tab: Nómina ----
+
+const TIPO_PERSONAL_LABELS = { planta_fija: 'Planta fija', por_proyecto: 'Por proyecto' };
+let empleados_cache = [];
+let roles_pago_cache = [];
+
+async function renderTabNomina() {
+  const content = document.getElementById('tesoreria-content');
+  content.innerHTML = `
+    <div class="module-header">
+      <h2 style="font-size:15px;">Empleados</h2>
+      <button class="btn" onclick="abrirModalEmpleado()">+ Nuevo empleado</button>
+    </div>
+    <table class="data-table" style="margin-bottom:28px;">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Cargo</th>
+          <th>Tipo</th>
+          <th>Contrato</th>
+          <th>Sueldo base</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="empleados-tbody">
+        <tr><td colspan="7">Cargando...</td></tr>
+      </tbody>
+    </table>
+
+    <div class="module-header">
+      <h2 style="font-size:15px;">Roles de pago</h2>
+      <button class="btn" onclick="abrirModalRolPago()">+ Nuevo rol de pago</button>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Periodo</th>
+          <th>Fecha de pago</th>
+          <th>Total</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="roles-pago-tbody">
+        <tr><td colspan="5">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  if (!contratos_cache.length) {
+    const { data } = await sb.from('contratos').select('*, clientes(razon_social)');
+    contratos_cache = data || [];
+  }
+
+  const { data: empleados, error: empError } = await sb
+    .from('empleados')
+    .select('*, contratos(numero)')
+    .order('created_at', { ascending: false });
+  if (!empError) empleados_cache = empleados || [];
+  pintarEmpleados();
+
+  const { data: roles, error: rolesError } = await sb
+    .from('nomina_roles_pago')
+    .select('*')
+    .order('periodo', { ascending: false });
+  if (!rolesError) roles_pago_cache = roles || [];
+  pintarRolesPago();
+}
+
+function pintarEmpleados() {
+  const tbody = document.getElementById('empleados-tbody');
+  if (!empleados_cache.length) {
+    tbody.innerHTML = '<tr><td colspan="7">No hay empleados registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = empleados_cache.map(e => `
+    <tr>
+      <td>${escapeHtml(e.nombre_completo)}</td>
+      <td>${escapeHtml(e.cargo)}</td>
+      <td>${TIPO_PERSONAL_LABELS[e.tipo_personal] || e.tipo_personal}</td>
+      <td>${e.contratos ? 'N.° ' + escapeHtml(e.contratos.numero) : '—'}</td>
+      <td>$${Number(e.sueldo_base || 0).toFixed(2)}</td>
+      <td><span class="badge ${e.activo ? 'activo' : 'inactivo'}">${e.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="row-actions">
+        <a onclick="abrirModalEmpleado('${e.id}')">Editar</a>
+        <a onclick="toggleActivoEmpleado('${e.id}', ${e.activo})">${e.activo ? 'Desactivar' : 'Activar'}</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalEmpleado(id) {
+  const empleado = id ? empleados_cache.find(e => e.id === id) : null;
+  const esEdicion = !!empleado;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>${esEdicion ? 'Editar empleado' : 'Nuevo empleado'}</h3>
+        <label>Nombre completo</label>
+        <input type="text" id="emp-nombre" value="${escapeHtml(empleado?.nombre_completo)}">
+        <div class="field-row">
+          <div>
+            <label>Cédula</label>
+            <input type="text" id="emp-cedula" value="${escapeHtml(empleado?.cedula)}">
+          </div>
+          <div>
+            <label>Cargo</label>
+            <input type="text" id="emp-cargo" value="${escapeHtml(empleado?.cargo)}">
+          </div>
+        </div>
+        <label>Tipo de personal</label>
+        <select id="emp-tipo" onchange="onCambioTipoEmpleado()">
+          <option value="planta_fija" ${(empleado?.tipo_personal || 'planta_fija') === 'planta_fija' ? 'selected' : ''}>Planta fija</option>
+          <option value="por_proyecto" ${empleado?.tipo_personal === 'por_proyecto' ? 'selected' : ''}>Por proyecto</option>
+        </select>
+        <div id="emp-contrato-wrap" style="${empleado?.tipo_personal === 'por_proyecto' ? '' : 'display:none;'}">
+          <label>Contrato asociado</label>
+          <select id="emp-contrato">
+            <option value="">Selecciona...</option>
+            ${contratos_cache.map(c => `<option value="${c.id}" ${empleado?.contrato_id === c.id ? 'selected' : ''}>N.° ${escapeHtml(c.numero)} — ${escapeHtml(c.clientes?.razon_social)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-row">
+          <div>
+            <label>Sueldo base</label>
+            <input type="text" id="emp-sueldo" value="${empleado?.sueldo_base ?? ''}" placeholder="0.00">
+          </div>
+          <div>
+            <label>Fecha de ingreso</label>
+            <input type="date" id="emp-fecha-ingreso" value="${empleado?.fecha_ingreso || ''}">
+          </div>
+        </div>
+        <label>Cuenta bancaria para pago</label>
+        <input type="text" id="emp-cuenta-bancaria" value="${escapeHtml(empleado?.cuenta_bancaria)}" placeholder="Número de cuenta del empleado">
+        <div id="emp-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarEmpleado(${esEdicion ? "'" + id + "'" : 'null'})">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function onCambioTipoEmpleado() {
+  const tipo = document.getElementById('emp-tipo').value;
+  document.getElementById('emp-contrato-wrap').style.display = tipo === 'por_proyecto' ? '' : 'none';
+}
+
+async function guardarEmpleado(id) {
+  const tipoPersonal = document.getElementById('emp-tipo').value;
+  const contratoEl = document.getElementById('emp-contrato');
+
+  const payload = {
+    nombre_completo: document.getElementById('emp-nombre').value.trim(),
+    cedula: document.getElementById('emp-cedula').value.trim(),
+    cargo: document.getElementById('emp-cargo').value.trim(),
+    tipo_personal: tipoPersonal,
+    contrato_id: tipoPersonal === 'por_proyecto' && contratoEl?.value ? contratoEl.value : null,
+    sueldo_base: parseFloat(document.getElementById('emp-sueldo').value) || 0,
+    fecha_ingreso: document.getElementById('emp-fecha-ingreso').value || null,
+    cuenta_bancaria: document.getElementById('emp-cuenta-bancaria').value.trim()
+  };
+
+  if (!payload.nombre_completo) {
+    showMsg('emp-msg', 'El nombre es obligatorio.', 'error');
+    return;
+  }
+
+  const query = id
+    ? sb.from('empleados').update(payload).eq('id', id)
+    : sb.from('empleados').insert(payload);
+
+  const { error } = await query;
+  if (error) {
+    showMsg('emp-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  renderTabNomina();
+}
+
+async function toggleActivoEmpleado(id, activoActual) {
+  const { error } = await sb.from('empleados').update({ activo: !activoActual }).eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  renderTabNomina();
+}
+
+const ESTADO_ROL_LABELS = { borrador: 'Borrador', aprobado: 'Aprobado', pagado: 'Pagado' };
+const ESTADO_ROL_BADGE = { borrador: 'inactivo', aprobado: 'cartera-parcial', pagado: 'activo' };
+let modal_rol_pago_id = null;
+let modal_rol_detalle = [];
+
+function pintarRolesPago() {
+  const tbody = document.getElementById('roles-pago-tbody');
+  if (!roles_pago_cache.length) {
+    tbody.innerHTML = '<tr><td colspan="5">No hay roles de pago registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = roles_pago_cache.map(r => `
+    <tr>
+      <td>${escapeHtml(r.periodo)}</td>
+      <td>${r.fecha_pago || '—'}</td>
+      <td>$${Number(r.total_pagado || 0).toFixed(2)}</td>
+      <td><span class="badge ${ESTADO_ROL_BADGE[r.estado] || 'inactivo'}">${ESTADO_ROL_LABELS[r.estado] || r.estado}</span></td>
+      <td class="row-actions">
+        <a onclick="abrirModalRolPago('${r.id}')">${r.estado === 'pagado' ? 'Ver' : 'Editar'}</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function abrirModalRolPago(id) {
+  modal_rol_pago_id = id || null;
+  let rol = id ? roles_pago_cache.find(r => r.id === id) : null;
+  modal_rol_detalle = [];
+
+  if (!empleados_cache.length) {
+    const { data } = await sb.from('empleados').select('*').eq('activo', true);
+    empleados_cache = data || [];
+  }
+
+  if (id) {
+    const { data } = await sb
+      .from('nomina_detalle')
+      .select('*, empleados(nombre_completo)')
+      .eq('rol_pago_id', id);
+    modal_rol_detalle = data || [];
+  } else {
+    // Pre-cargar todos los empleados activos con su sueldo base
+    modal_rol_detalle = empleados_cache.filter(e => e.activo).map(e => ({
+      empleado_id: e.id,
+      empleados: { nombre_completo: e.nombre_completo },
+      sueldo: e.sueldo_base || 0,
+      otros_ingresos: 0,
+      deducciones: 0
+    }));
+  }
+
+  pintarModalRolPago(rol);
+}
+
+function pintarModalRolPago(rol) {
+  const esEdicion = !!rol;
+  const bloqueado = rol?.estado === 'pagado';
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card extra-wide">
+        <h3>${esEdicion ? 'Rol de pago — ' + escapeHtml(rol.periodo) : 'Nuevo rol de pago'}</h3>
+        ${bloqueado ? '<div class="readonly-banner">Este rol ya fue pagado. Los montos quedaron congelados y los movimientos de tesorería ya se generaron.</div>' : ''}
+        <div class="field-row">
+          <div>
+            <label>Periodo</label>
+            <input type="text" id="rol-periodo" value="${escapeHtml(rol?.periodo) || ''}" placeholder="ej. 2026-06" ${bloqueado ? 'disabled' : ''}>
+          </div>
+          <div>
+            <label>Fecha de pago</label>
+            <input type="date" id="rol-fecha-pago" value="${rol?.fecha_pago || ''}" ${bloqueado ? 'disabled' : ''}>
+          </div>
+        </div>
+
+        <label style="margin-top:16px;">Detalle por empleado</label>
+        <div class="nomina-detalle-row header">
+          <div>Empleado</div><div>Sueldo</div><div>Otros ingresos</div><div>Deducciones</div><div>Líquido a recibir</div>
+        </div>
+        <div id="rol-detalle-rows"></div>
+
+        <div class="totales-box">
+          <div class="fila total"><span>Total del rol</span><span id="rol-total-display">$0.00</span></div>
+        </div>
+
+        <div id="rol-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+          ${!bloqueado ? '<button class="btn btn-secondary" onclick="guardarRolPago(false)">Guardar borrador</button>' : ''}
+          ${!bloqueado ? '<button class="btn" onclick="pagarRolNomina()">Marcar como pagado</button>' : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  pintarDetalleRolPago(bloqueado);
+}
+
+function pintarDetalleRolPago(bloqueado) {
+  const cont = document.getElementById('rol-detalle-rows');
+  cont.innerHTML = modal_rol_detalle.map((d, idx) => {
+    const liquido = (parseFloat(d.sueldo) || 0) + (parseFloat(d.otros_ingresos) || 0) - (parseFloat(d.deducciones) || 0);
+    if (bloqueado) {
+      return `
+        <div class="nomina-detalle-row">
+          <div>${escapeHtml(d.empleados?.nombre_completo)}</div>
+          <div>$${Number(d.sueldo).toFixed(2)}</div>
+          <div>$${Number(d.otros_ingresos).toFixed(2)}</div>
+          <div>$${Number(d.deducciones).toFixed(2)}</div>
+          <div>$${liquido.toFixed(2)}</div>
+        </div>
+      `;
+    }
+    return `
+      <div class="nomina-detalle-row">
+        <div>${escapeHtml(d.empleados?.nombre_completo)}</div>
+        <div><input type="text" value="${d.sueldo}" onchange="actualizarDetalleRol(${idx}, 'sueldo', this.value)"></div>
+        <div><input type="text" value="${d.otros_ingresos}" onchange="actualizarDetalleRol(${idx}, 'otros_ingresos', this.value)"></div>
+        <div><input type="text" value="${d.deducciones}" onchange="actualizarDetalleRol(${idx}, 'deducciones', this.value)"></div>
+        <div>$${liquido.toFixed(2)}</div>
+      </div>
+    `;
+  }).join('');
+
+  calcularTotalRolPago();
+}
+
+function actualizarDetalleRol(idx, campo, valor) {
+  modal_rol_detalle[idx][campo] = valor;
+  pintarDetalleRolPago(false);
+}
+
+function calcularTotalRolPago() {
+  const total = modal_rol_detalle.reduce((acc, d) =>
+    acc + (parseFloat(d.sueldo) || 0) + (parseFloat(d.otros_ingresos) || 0) - (parseFloat(d.deducciones) || 0), 0);
+  document.getElementById('rol-total-display').textContent = '$' + total.toFixed(2);
+  return total;
+}
+
+async function guardarRolPago(seraPagado) {
+  const periodo = document.getElementById('rol-periodo').value.trim();
+  if (!periodo) {
+    showMsg('rol-msg', 'El periodo es obligatorio (ej. 2026-06).', 'error');
+    return;
+  }
+
+  const total = calcularTotalRolPago();
+  const payload = {
+    periodo: periodo,
+    fecha_pago: document.getElementById('rol-fecha-pago').value || null,
+    estado: seraPagado ? 'pagado' : 'borrador',
+    total_pagado: total
+  };
+
+  if (modal_rol_pago_id) {
+    const { error } = await sb.from('nomina_roles_pago').update(payload).eq('id', modal_rol_pago_id);
+    if (error) { showMsg('rol-msg', 'Error: ' + error.message, 'error'); return null; }
+  } else {
+    const { data, error } = await sb.from('nomina_roles_pago').insert(payload).select().single();
+    if (error) { showMsg('rol-msg', 'Error: ' + error.message, 'error'); return null; }
+    modal_rol_pago_id = data.id;
+  }
+
+  // Reescribir el detalle: borrar el anterior e insertar de nuevo
+  await sb.from('nomina_detalle').delete().eq('rol_pago_id', modal_rol_pago_id);
+
+  const detallePayload = modal_rol_detalle.map(d => ({
+    rol_pago_id: modal_rol_pago_id,
+    empleado_id: d.empleado_id,
+    sueldo: parseFloat(d.sueldo) || 0,
+    otros_ingresos: parseFloat(d.otros_ingresos) || 0,
+    deducciones: parseFloat(d.deducciones) || 0
+  }));
+
+  const { error: detalleError } = await sb.from('nomina_detalle').insert(detallePayload);
+  if (detalleError) {
+    showMsg('rol-msg', 'Rol guardado, pero hubo un error con el detalle: ' + detalleError.message, 'error');
+    return null;
+  }
+
+  return modal_rol_pago_id;
+}
+
+async function pagarRolNomina() {
+  const cuentaSelect = cuentas_bancarias_cache.length
+    ? cuentas_bancarias_cache.map((c, i) => `${i + 1}. ${c.nombre}`).join('\n')
+    : null;
+
+  if (!cuentaSelect) {
+    showMsg('rol-msg', 'Primero registra al menos una cuenta bancaria en la pestaña Movimientos.', 'error');
+    return;
+  }
+
+  const seleccion = prompt('¿Desde qué cuenta se pagará la nómina?\n\n' + cuentaSelect + '\n\nEscribe el número de la cuenta:');
+  const idx = parseInt(seleccion) - 1;
+  if (isNaN(idx) || !cuentas_bancarias_cache[idx]) {
+    showMsg('rol-msg', 'Selección de cuenta inválida. No se procesó el pago.', 'error');
+    return;
+  }
+  const cuenta = cuentas_bancarias_cache[idx];
+
+  if (!confirm('¿Confirmas el pago de la nómina del periodo desde la cuenta "' + cuenta.nombre + '"? Esto generará un movimiento de egreso por cada empleado.')) {
+    return;
+  }
+
+  const rolId = await guardarRolPago(true);
+  if (!rolId) return;
+
+  // Crear un movimiento de egreso por cada empleado del detalle
+  const fechaPago = document.getElementById('rol-fecha-pago').value || new Date().toISOString().slice(0, 10);
+  let totalPagado = 0;
+
+  for (const d of modal_rol_detalle) {
+    const liquido = (parseFloat(d.sueldo) || 0) + (parseFloat(d.otros_ingresos) || 0) - (parseFloat(d.deducciones) || 0);
+    totalPagado += liquido;
+
+    await sb.from('tesoreria_movimientos').insert({
+      cuenta_id: cuenta.id,
+      tipo: 'egreso',
+      origen: 'nomina',
+      origen_id: rolId,
+      monto: liquido,
+      fecha: fechaPago,
+      descripcion: 'Pago de nómina — ' + (d.empleados?.nombre_completo || '')
+    });
+  }
+
+  const nuevoSaldo = Number(cuenta.saldo_actual || 0) - totalPagado;
+  await sb.from('cuentas_bancarias').update({ saldo_actual: nuevoSaldo }).eq('id', cuenta.id);
+  cuenta.saldo_actual = nuevoSaldo;
+
+  alert('Nómina pagada correctamente. Se generaron ' + modal_rol_detalle.length + ' movimientos de egreso en Tesorería.');
+  closeModal();
+  renderTabNomina();
 }
 
 init();
