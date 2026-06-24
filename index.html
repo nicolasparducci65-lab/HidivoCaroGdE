@@ -113,6 +113,116 @@
     padding: 32px;
     overflow-y: auto;
   }
+
+  /* ---- Catálogo: tabla, modal, controles ---- */
+  .module-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  .module-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .btn {
+    width: auto;
+    margin-top: 0;
+    padding: 9px 16px;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .btn-secondary {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+  .search-bar {
+    margin-bottom: 16px;
+  }
+  .search-bar input {
+    max-width: 300px;
+  }
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table.data-table th, table.data-table td {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  table.data-table th {
+    background: var(--color-bg);
+    font-weight: 500;
+    color: var(--color-text-muted);
+  }
+  table.data-table tr:last-child td { border-bottom: none; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .badge.activo { background: #eaf3de; color: var(--color-success); }
+  .badge.inactivo { background: #f1efe8; color: var(--color-text-muted); }
+  .row-actions a {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-size: 13px;
+    margin-right: 12px;
+    cursor: pointer;
+  }
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(44, 44, 42, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-card {
+    background: var(--color-surface);
+    border-radius: 12px;
+    padding: 28px;
+    max-width: 440px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  .modal-card h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .modal-actions .btn { flex: 1; margin-top: 0; }
+  .field-row { display: flex; gap: 12px; }
+  .field-row > div { flex: 1; }
+  select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+  }
 </style>
 </head>
 <body>
@@ -168,6 +278,8 @@
     </main>
   </div>
 </div>
+
+<div id="modal-container"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -227,7 +339,9 @@ document.getElementById('btn-send-magic-link').addEventListener('click', async (
   btn.textContent = 'Enviar enlace de acceso';
 
   if (error) {
-    showMsg('login-msg', 'Error: ' + error.message, 'error');
+    console.error('Error completo de signInWithOtp:', error);
+    const mensaje = error.message || error.error_description || JSON.stringify(error);
+    showMsg('login-msg', 'Error: ' + mensaje, 'error');
   } else {
     showMsg('login-msg', 'Te enviamos un enlace de acceso a tu correo. Revisa tu bandeja de entrada.', 'success');
   }
@@ -290,7 +404,7 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
 });
 
 // =====================================================================
-// NAVEGACIÓN ENTRE MÓDULOS (placeholder — se irá llenando módulo por módulo)
+// NAVEGACIÓN ENTRE MÓDULOS
 // =====================================================================
 document.getElementById('main-nav').addEventListener('click', (e) => {
   const link = e.target.closest('a');
@@ -301,10 +415,476 @@ document.getElementById('main-nav').addEventListener('click', (e) => {
   link.classList.add('active');
 
   const modulo = link.dataset.module;
-  document.getElementById('main-content').innerHTML =
-    '<h2 style="font-size:18px;font-weight:600;">' + link.textContent + '</h2>' +
-    '<p style="color:var(--color-text-muted);margin-top:8px;">Módulo en construcción.</p>';
+  renderModule(modulo);
 });
+
+function renderModule(modulo) {
+  const renderers = {
+    servicios: renderServicios,
+    clientes: renderClientes,
+    proveedores: renderProveedores
+  };
+
+  if (renderers[modulo]) {
+    renderers[modulo]();
+  } else {
+    document.getElementById('main-content').innerHTML =
+      '<h2 style="font-size:18px;font-weight:600;">' + modulo + '</h2>' +
+      '<p style="color:var(--color-text-muted);margin-top:8px;">Módulo en construcción.</p>';
+  }
+}
+
+// =====================================================================
+// UTILIDADES COMPARTIDAS DE CATÁLOGO
+// =====================================================================
+function closeModal() {
+  document.getElementById('modal-container').innerHTML = '';
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// =====================================================================
+// MÓDULO: SERVICIOS
+// =====================================================================
+let servicios_cache = [];
+
+async function renderServicios() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Servicios</h2>
+      <button class="btn" onclick="abrirModalServicio()">+ Nuevo servicio</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="servicios-search" placeholder="Buscar por nombre o código...">
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Modalidad de tarifa</th>
+          <th>Tarifa referencial</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="servicios-tbody">
+        <tr><td colspan="6">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('servicios-search').addEventListener('input', (e) => {
+    pintarServicios(filtrar(servicios_cache, e.target.value, ['nombre', 'codigo']));
+  });
+
+  const { data, error } = await sb.from('servicios').select('*').order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('servicios-tbody').innerHTML =
+      '<tr><td colspan="6">Error cargando servicios: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  servicios_cache = data;
+  pintarServicios(servicios_cache);
+}
+
+function filtrar(arr, texto, campos) {
+  const t = texto.trim().toLowerCase();
+  if (!t) return arr;
+  return arr.filter(item => campos.some(c => (item[c] || '').toLowerCase().includes(t)));
+}
+
+const MODALIDAD_LABELS = {
+  fijo_mensual: 'Fijo mensual',
+  porcentaje_obra: '% del valor de obra',
+  por_hora: 'Por hora',
+  por_hito: 'Por hito'
+};
+
+function pintarServicios(lista) {
+  const tbody = document.getElementById('servicios-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="6">No hay servicios registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(s => `
+    <tr>
+      <td>${escapeHtml(s.codigo)}</td>
+      <td>${escapeHtml(s.nombre)}</td>
+      <td>${escapeHtml(MODALIDAD_LABELS[s.modalidad_tarifa] || s.modalidad_tarifa || '—')}</td>
+      <td>${s.tarifa_referencial != null ? '$' + Number(s.tarifa_referencial).toFixed(2) : '—'}</td>
+      <td><span class="badge ${s.activo ? 'activo' : 'inactivo'}">${s.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="row-actions">
+        <a onclick="abrirModalServicio('${s.id}')">Editar</a>
+        <a onclick="toggleActivoServicio('${s.id}', ${s.activo})">${s.activo ? 'Desactivar' : 'Activar'}</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalServicio(id) {
+  const servicio = id ? servicios_cache.find(s => s.id === id) : null;
+  const esEdicion = !!servicio;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>${esEdicion ? 'Editar servicio' : 'Nuevo servicio'}</h3>
+        <label>Código</label>
+        <input type="text" id="serv-codigo" value="${escapeHtml(servicio?.codigo)}" placeholder="ej. SRV-001">
+        <label>Nombre</label>
+        <input type="text" id="serv-nombre" value="${escapeHtml(servicio?.nombre)}" placeholder="ej. Fiscalización de obra">
+        <label>Descripción</label>
+        <input type="text" id="serv-descripcion" value="${escapeHtml(servicio?.descripcion)}" placeholder="Opcional">
+        <label>Modalidad de tarifa</label>
+        <select id="serv-modalidad">
+          <option value="fijo_mensual" ${servicio?.modalidad_tarifa === 'fijo_mensual' ? 'selected' : ''}>Fijo mensual</option>
+          <option value="porcentaje_obra" ${servicio?.modalidad_tarifa === 'porcentaje_obra' ? 'selected' : ''}>% del valor de obra</option>
+          <option value="por_hora" ${servicio?.modalidad_tarifa === 'por_hora' ? 'selected' : ''}>Por hora</option>
+          <option value="por_hito" ${servicio?.modalidad_tarifa === 'por_hito' ? 'selected' : ''}>Por hito</option>
+        </select>
+        <label>Tarifa referencial</label>
+        <input type="text" id="serv-tarifa" value="${servicio?.tarifa_referencial ?? ''}" placeholder="0.00">
+        <div id="serv-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarServicio(${esEdicion ? "'" + id + "'" : 'null'})">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarServicio(id) {
+  const payload = {
+    codigo: document.getElementById('serv-codigo').value.trim(),
+    nombre: document.getElementById('serv-nombre').value.trim(),
+    descripcion: document.getElementById('serv-descripcion').value.trim(),
+    modalidad_tarifa: document.getElementById('serv-modalidad').value,
+    tarifa_referencial: parseFloat(document.getElementById('serv-tarifa').value) || 0
+  };
+
+  if (!payload.nombre) {
+    showMsg('serv-msg', 'El nombre es obligatorio.', 'error');
+    return;
+  }
+
+  const query = id
+    ? sb.from('servicios').update(payload).eq('id', id)
+    : sb.from('servicios').insert(payload);
+
+  const { error } = await query;
+  if (error) {
+    showMsg('serv-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  renderServicios();
+}
+
+async function toggleActivoServicio(id, activoActual) {
+  const { error } = await sb.from('servicios').update({ activo: !activoActual }).eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  renderServicios();
+}
+
+// =====================================================================
+// MÓDULO: CLIENTES
+// =====================================================================
+let clientes_cache = [];
+
+async function renderClientes() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Clientes</h2>
+      <button class="btn" onclick="abrirModalCliente()">+ Nuevo cliente</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="clientes-search" placeholder="Buscar por razón social o RUC...">
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Razón social</th>
+          <th>RUC</th>
+          <th>Contacto</th>
+          <th>Días crédito</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="clientes-tbody">
+        <tr><td colspan="6">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('clientes-search').addEventListener('input', (e) => {
+    pintarClientes(filtrar(clientes_cache, e.target.value, ['razon_social', 'ruc']));
+  });
+
+  const { data, error } = await sb.from('clientes').select('*').order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('clientes-tbody').innerHTML =
+      '<tr><td colspan="6">Error cargando clientes: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  clientes_cache = data;
+  pintarClientes(clientes_cache);
+}
+
+function pintarClientes(lista) {
+  const tbody = document.getElementById('clientes-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="6">No hay clientes registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(c => `
+    <tr>
+      <td>${escapeHtml(c.razon_social)}</td>
+      <td>${escapeHtml(c.ruc)}</td>
+      <td>${escapeHtml(c.contacto_nombre)}</td>
+      <td>${c.dias_credito ?? 0} días</td>
+      <td><span class="badge ${c.activo ? 'activo' : 'inactivo'}">${c.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="row-actions">
+        <a onclick="abrirModalCliente('${c.id}')">Editar</a>
+        <a onclick="toggleActivoCliente('${c.id}', ${c.activo})">${c.activo ? 'Desactivar' : 'Activar'}</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalCliente(id) {
+  const cliente = id ? clientes_cache.find(c => c.id === id) : null;
+  const esEdicion = !!cliente;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>${esEdicion ? 'Editar cliente' : 'Nuevo cliente'}</h3>
+        <label>Razón social</label>
+        <input type="text" id="cli-razon" value="${escapeHtml(cliente?.razon_social)}">
+        <div class="field-row">
+          <div>
+            <label>RUC</label>
+            <input type="text" id="cli-ruc" value="${escapeHtml(cliente?.ruc)}">
+          </div>
+          <div>
+            <label>Días de crédito</label>
+            <input type="text" id="cli-dias" value="${cliente?.dias_credito ?? 0}">
+          </div>
+        </div>
+        <label>Nombre de contacto</label>
+        <input type="text" id="cli-contacto-nombre" value="${escapeHtml(cliente?.contacto_nombre)}">
+        <div class="field-row">
+          <div>
+            <label>Correo de contacto</label>
+            <input type="text" id="cli-contacto-email" value="${escapeHtml(cliente?.contacto_email)}">
+          </div>
+          <div>
+            <label>Teléfono</label>
+            <input type="text" id="cli-contacto-tel" value="${escapeHtml(cliente?.contacto_telefono)}">
+          </div>
+        </div>
+        <label>Dirección</label>
+        <input type="text" id="cli-direccion" value="${escapeHtml(cliente?.direccion)}">
+        <div id="cli-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarCliente(${esEdicion ? "'" + id + "'" : 'null'})">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarCliente(id) {
+  const payload = {
+    razon_social: document.getElementById('cli-razon').value.trim(),
+    ruc: document.getElementById('cli-ruc').value.trim(),
+    dias_credito: parseInt(document.getElementById('cli-dias').value) || 0,
+    contacto_nombre: document.getElementById('cli-contacto-nombre').value.trim(),
+    contacto_email: document.getElementById('cli-contacto-email').value.trim(),
+    contacto_telefono: document.getElementById('cli-contacto-tel').value.trim(),
+    direccion: document.getElementById('cli-direccion').value.trim()
+  };
+
+  if (!payload.razon_social) {
+    showMsg('cli-msg', 'La razón social es obligatoria.', 'error');
+    return;
+  }
+
+  const query = id
+    ? sb.from('clientes').update(payload).eq('id', id)
+    : sb.from('clientes').insert(payload);
+
+  const { error } = await query;
+  if (error) {
+    showMsg('cli-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  renderClientes();
+}
+
+async function toggleActivoCliente(id, activoActual) {
+  const { error } = await sb.from('clientes').update({ activo: !activoActual }).eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  renderClientes();
+}
+
+// =====================================================================
+// MÓDULO: PROVEEDORES
+// =====================================================================
+let proveedores_cache = [];
+
+async function renderProveedores() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Proveedores</h2>
+      <button class="btn" onclick="abrirModalProveedor()">+ Nuevo proveedor</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="proveedores-search" placeholder="Buscar por razón social o RUC...">
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Razón social</th>
+          <th>RUC</th>
+          <th>Tipo</th>
+          <th>Contacto</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="proveedores-tbody">
+        <tr><td colspan="6">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('proveedores-search').addEventListener('input', (e) => {
+    pintarProveedores(filtrar(proveedores_cache, e.target.value, ['razon_social', 'ruc']));
+  });
+
+  const { data, error } = await sb.from('proveedores').select('*').order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('proveedores-tbody').innerHTML =
+      '<tr><td colspan="6">Error cargando proveedores: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  proveedores_cache = data;
+  pintarProveedores(proveedores_cache);
+}
+
+const TIPO_PROVEEDOR_LABELS = { bienes: 'Bienes', servicios: 'Servicios', ambos: 'Bienes y servicios' };
+
+function pintarProveedores(lista) {
+  const tbody = document.getElementById('proveedores-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="6">No hay proveedores registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(p => `
+    <tr>
+      <td>${escapeHtml(p.razon_social)}</td>
+      <td>${escapeHtml(p.ruc)}</td>
+      <td>${escapeHtml(TIPO_PROVEEDOR_LABELS[p.tipo] || p.tipo || '—')}</td>
+      <td>${escapeHtml(p.contacto_nombre)}</td>
+      <td><span class="badge ${p.activo ? 'activo' : 'inactivo'}">${p.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="row-actions">
+        <a onclick="abrirModalProveedor('${p.id}')">Editar</a>
+        <a onclick="toggleActivoProveedor('${p.id}', ${p.activo})">${p.activo ? 'Desactivar' : 'Activar'}</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalProveedor(id) {
+  const proveedor = id ? proveedores_cache.find(p => p.id === id) : null;
+  const esEdicion = !!proveedor;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>${esEdicion ? 'Editar proveedor' : 'Nuevo proveedor'}</h3>
+        <label>Razón social</label>
+        <input type="text" id="prov-razon" value="${escapeHtml(proveedor?.razon_social)}">
+        <div class="field-row">
+          <div>
+            <label>RUC</label>
+            <input type="text" id="prov-ruc" value="${escapeHtml(proveedor?.ruc)}">
+          </div>
+          <div>
+            <label>Días de crédito</label>
+            <input type="text" id="prov-dias" value="${proveedor?.dias_credito ?? 0}">
+          </div>
+        </div>
+        <label>Tipo</label>
+        <select id="prov-tipo">
+          <option value="bienes" ${proveedor?.tipo === 'bienes' ? 'selected' : ''}>Bienes</option>
+          <option value="servicios" ${proveedor?.tipo === 'servicios' ? 'selected' : ''}>Servicios</option>
+          <option value="ambos" ${proveedor?.tipo === 'ambos' ? 'selected' : ''}>Bienes y servicios</option>
+        </select>
+        <label>Nombre de contacto</label>
+        <input type="text" id="prov-contacto-nombre" value="${escapeHtml(proveedor?.contacto_nombre)}">
+        <label>Correo de contacto</label>
+        <input type="text" id="prov-contacto-email" value="${escapeHtml(proveedor?.contacto_email)}">
+        <div id="prov-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarProveedor(${esEdicion ? "'" + id + "'" : 'null'})">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarProveedor(id) {
+  const payload = {
+    razon_social: document.getElementById('prov-razon').value.trim(),
+    ruc: document.getElementById('prov-ruc').value.trim(),
+    dias_credito: parseInt(document.getElementById('prov-dias').value) || 0,
+    tipo: document.getElementById('prov-tipo').value,
+    contacto_nombre: document.getElementById('prov-contacto-nombre').value.trim(),
+    contacto_email: document.getElementById('prov-contacto-email').value.trim()
+  };
+
+  if (!payload.razon_social) {
+    showMsg('prov-msg', 'La razón social es obligatoria.', 'error');
+    return;
+  }
+
+  const query = id
+    ? sb.from('proveedores').update(payload).eq('id', id)
+    : sb.from('proveedores').insert(payload);
+
+  const { error } = await query;
+  if (error) {
+    showMsg('prov-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  renderProveedores();
+}
+
+async function toggleActivoProveedor(id, activoActual) {
+  const { error } = await sb.from('proveedores').update({ activo: !activoActual }).eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  renderProveedores();
+}
+
 
 // =====================================================================
 // FLUJO PRINCIPAL: determinar qué pantalla mostrar al cargar
