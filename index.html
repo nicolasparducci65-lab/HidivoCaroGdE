@@ -614,6 +614,84 @@
     margin-top: 0;
     padding: 10px 20px;
   }
+  .chat-reply-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 20px;
+    background: var(--color-bg);
+    font-size: 12px;
+    color: var(--color-text-muted);
+    border-top: 1px solid var(--color-border);
+  }
+  .chat-reply-banner a {
+    color: var(--color-primary);
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .chat-bubble-wrap {
+    display: flex;
+    flex-direction: column;
+    max-width: 60%;
+    position: relative;
+  }
+  .chat-bubble-wrap.mine { align-self: flex-end; }
+  .chat-bubble-wrap.theirs { align-self: flex-start; }
+  .chat-bubble-wrap.hilo {
+    margin-left: 28px;
+    max-width: calc(60% - 28px);
+  }
+  .chat-hilo-indicador {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-bottom: 3px;
+    padding-left: 4px;
+  }
+  .chat-bubble {
+    padding: 9px 13px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+    position: relative;
+  }
+  .chat-bubble.mine {
+    background: var(--color-primary);
+    color: white;
+  }
+  .chat-bubble.theirs {
+    background: var(--color-bg);
+  }
+  .chat-bubble.eliminado {
+    background: transparent;
+    border: 1px dashed var(--color-border);
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+  .chat-bubble .autor {
+    font-size: 11px;
+    font-weight: 500;
+    margin-bottom: 3px;
+    opacity: 0.8;
+  }
+  .chat-bubble .hora {
+    font-size: 10px;
+    opacity: 0.6;
+    margin-top: 3px;
+    text-align: right;
+  }
+  .chat-bubble-actions {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    margin-top: 3px;
+    padding: 0 4px;
+  }
+  .chat-bubble-actions a {
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+  .chat-bubble-actions a:hover { color: var(--color-primary); }
+  .chat-bubble-actions.mine { justify-content: flex-end; }
 </style>
 </head>
 <body>
@@ -3171,6 +3249,7 @@ let chat_perfiles_cache = {}; // id -> perfil, para mostrar nombres y presencia
 let chat_realtime_channel = null;
 let chat_presencia_channel = null;
 let chat_usuario_actual = null;
+let chat_respondiendo_a = null; // id del mensaje al que se está respondiendo
 
 async function renderChat() {
   const main = document.getElementById('main-content');
@@ -3184,6 +3263,7 @@ async function renderChat() {
       </aside>
       <div class="chat-main">
         <div class="chat-messages" id="chat-messages"></div>
+        <div id="chat-reply-banner"></div>
         <div class="chat-input-bar">
           <input type="text" id="chat-input" placeholder="Escribe un mensaje...">
           <button class="btn" onclick="enviarMensajeChat()">Enviar</button>
@@ -3246,21 +3326,99 @@ function pintarMensajesChat() {
     return;
   }
 
-  cont.innerHTML = chat_mensajes_cache.map(m => {
-    const esMio = m.autor_id === chat_usuario_actual?.id;
-    const autor = chat_perfiles_cache[m.autor_id];
-    const nombreAutor = autor?.nombre_completo || autor?.email || 'Usuario';
-    const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) : '';
+  // Solo los mensajes raíz (sin padre) definen el orden principal;
+  // cada respuesta se pinta justo debajo de su mensaje padre, en orden
+  // cronológico, simulando un hilo anidado inline.
+  const raiz = chat_mensajes_cache.filter(m => !m.mensaje_padre_id);
+  const respuestasPorPadre = {};
+  chat_mensajes_cache.filter(m => m.mensaje_padre_id).forEach(m => {
+    if (!respuestasPorPadre[m.mensaje_padre_id]) respuestasPorPadre[m.mensaje_padre_id] = [];
+    respuestasPorPadre[m.mensaje_padre_id].push(m);
+  });
+
+  let html = '';
+  raiz.forEach(m => {
+    html += renderBurbujaChat(m, false);
+    (respuestasPorPadre[m.id] || []).forEach(hijo => {
+      html += renderBurbujaChat(hijo, true, m);
+    });
+  });
+
+  cont.innerHTML = html;
+  cont.scrollTop = cont.scrollHeight;
+}
+
+function renderBurbujaChat(m, esHilo, mensajePadre) {
+  const esMio = m.autor_id === chat_usuario_actual?.id;
+  const autor = chat_perfiles_cache[m.autor_id];
+  const nombreAutor = autor?.nombre_completo || autor?.email || 'Usuario';
+  const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) : '';
+  const lado = esMio ? 'mine' : 'theirs';
+
+  if (m.eliminado) {
     return `
-      <div class="chat-bubble ${esMio ? 'mine' : 'theirs'}">
+      <div class="chat-bubble-wrap ${lado} ${esHilo ? 'hilo' : ''}">
+        ${esHilo ? '<div class="chat-hilo-indicador">↳ en respuesta a ' + escapeHtml(chat_perfiles_cache[mensajePadre.autor_id]?.nombre_completo || '') + '</div>' : ''}
+        <div class="chat-bubble eliminado">Mensaje eliminado</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="chat-bubble-wrap ${lado} ${esHilo ? 'hilo' : ''}">
+      ${esHilo ? '<div class="chat-hilo-indicador">↳ en respuesta a ' + escapeHtml(chat_perfiles_cache[mensajePadre.autor_id]?.nombre_completo || '') + '</div>' : ''}
+      <div class="chat-bubble ${lado}">
         ${!esMio ? '<div class="autor">' + escapeHtml(nombreAutor) + '</div>' : ''}
         <div>${escapeHtml(m.contenido)}</div>
         <div class="hora">${hora}</div>
       </div>
-    `;
-  }).join('');
+      <div class="chat-bubble-actions ${lado}">
+        <a onclick="responderMensajeChat('${m.id}')">Responder</a>
+        ${esMio ? '<a onclick="eliminarMensajeChat(\'' + m.id + '\')">Eliminar</a>' : ''}
+      </div>
+    </div>
+  `;
+}
 
-  cont.scrollTop = cont.scrollHeight;
+function responderMensajeChat(mensajeId) {
+  chat_respondiendo_a = mensajeId;
+  const mensaje = chat_mensajes_cache.find(m => m.id === mensajeId);
+  const autor = chat_perfiles_cache[mensaje.autor_id];
+  const nombreAutor = autor?.nombre_completo || autor?.email || 'Usuario';
+
+  document.getElementById('chat-reply-banner').innerHTML = `
+    <div class="chat-reply-banner">
+      <span>Respondiendo a <strong>${escapeHtml(nombreAutor)}</strong>: "${escapeHtml((mensaje.contenido || '').slice(0, 60))}${mensaje.contenido.length > 60 ? '...' : ''}"</span>
+      <a onclick="cancelarRespuestaChat()">Cancelar</a>
+    </div>
+  `;
+  document.getElementById('chat-input').focus();
+}
+
+function cancelarRespuestaChat() {
+  chat_respondiendo_a = null;
+  document.getElementById('chat-reply-banner').innerHTML = '';
+}
+
+async function eliminarMensajeChat(mensajeId) {
+  if (!confirm('¿Eliminar este mensaje? Quedará marcado como "Mensaje eliminado" para todos.')) return;
+
+  const { error } = await sb
+    .from('mensajes')
+    .update({ eliminado: true, eliminado_en: new Date().toISOString() })
+    .eq('id', mensajeId)
+    .eq('autor_id', chat_usuario_actual.id); // doble seguro: solo borra lo propio
+
+  if (error) {
+    alert('Error eliminando mensaje: ' + error.message);
+    return;
+  }
+
+  const idx = chat_mensajes_cache.findIndex(m => m.id === mensajeId);
+  if (idx !== -1) {
+    chat_mensajes_cache[idx].eliminado = true;
+    pintarMensajesChat();
+  }
 }
 
 async function enviarMensajeChat() {
@@ -3269,11 +3427,14 @@ async function enviarMensajeChat() {
   if (!contenido) return;
 
   input.value = '';
+  const padreId = chat_respondiendo_a;
+  cancelarRespuestaChat();
 
   const { error } = await sb.from('mensajes').insert({
     canal_id: chat_canal_id,
     autor_id: chat_usuario_actual.id,
-    contenido: contenido
+    contenido: contenido,
+    mensaje_padre_id: padreId
   });
 
   if (error) {
@@ -3298,6 +3459,18 @@ function suscribirRealtimeChat() {
     }, (payload) => {
       chat_mensajes_cache.push(payload.new);
       pintarMensajesChat();
+    })
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'mensajes',
+      filter: 'canal_id=eq.' + chat_canal_id
+    }, (payload) => {
+      const idx = chat_mensajes_cache.findIndex(m => m.id === payload.new.id);
+      if (idx !== -1) {
+        chat_mensajes_cache[idx] = payload.new;
+        pintarMensajesChat();
+      }
     })
     .subscribe();
 }
