@@ -402,6 +402,53 @@
   .checkbox-row label {
     margin: 0;
   }
+
+  /* ---- Cartera ---- */
+  .badge.cartera-pendiente { background: #faeeda; color: #854f0b; }
+  .badge.cartera-parcial { background: #e6f1fb; color: #0c447c; }
+  .badge.cartera-pagado { background: #eaf3de; color: #3b6d11; }
+  .badge.cartera-vencido { background: #fcebeb; color: #a32d2d; }
+  .saldo-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--color-border);
+    border-radius: 100px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .saldo-bar .fill {
+    height: 100%;
+    background: var(--color-success);
+  }
+  .abono-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .abono-row:last-child { border-bottom: none; }
+  .resumen-cartera {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .resumen-card {
+    flex: 1;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 14px 18px;
+  }
+  .resumen-card .label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+  .resumen-card .valor {
+    font-size: 20px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
 </style>
 </head>
 <body>
@@ -603,7 +650,8 @@ function renderModule(modulo) {
     clientes: renderClientes,
     proveedores: renderProveedores,
     proformas: renderProformas,
-    contratos: renderContratos
+    contratos: renderContratos,
+    cartera: renderCartera
   };
 
   if (renderers[modulo]) {
@@ -1869,6 +1917,382 @@ sb.auth.onAuthStateChange((event, session) => {
     showScreen('screen-login');
   }
 });
+
+// =====================================================================
+// MÓDULO: CARTERA (CxC y CxP)
+// =====================================================================
+const ESTADO_CARTERA_LABELS = { pendiente: 'Pendiente', parcial: 'Parcial', pagado: 'Pagado', vencido: 'Vencido' };
+let cartera_cache = [];
+let cartera_filtro_tipo = 'por_cobrar';
+let modal_cartera_id = null;
+let modal_cartera_abonos = [];
+
+async function renderCartera() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Cartera</h2>
+      <button class="btn" onclick="abrirModalCartera()">+ Nuevo documento</button>
+    </div>
+    <div class="filter-pills" id="cartera-filtros">
+      <button data-tipo="por_cobrar" class="active">Por cobrar</button>
+      <button data-tipo="por_pagar">Por pagar</button>
+    </div>
+    <div class="resumen-cartera" id="cartera-resumen"></div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Concepto</th>
+          <th>Cliente / proveedor</th>
+          <th>Monto original</th>
+          <th>Saldo pendiente</th>
+          <th>Vencimiento</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="cartera-tbody">
+        <tr><td colspan="7">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('cartera-filtros').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    document.querySelectorAll('#cartera-filtros button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    cartera_filtro_tipo = btn.dataset.tipo;
+    pintarCartera();
+  });
+
+  if (!clientes_cache.length) {
+    const { data } = await sb.from('clientes').select('*').eq('activo', true);
+    clientes_cache = data || [];
+  }
+  if (!proveedores_cache.length) {
+    const { data } = await sb.from('proveedores').select('*').eq('activo', true);
+    proveedores_cache = data || [];
+  }
+  if (!contratos_cache.length) {
+    const { data } = await sb.from('contratos').select('*, clientes(razon_social)');
+    contratos_cache = data || [];
+  }
+
+  const { data, error } = await sb
+    .from('cartera_documentos')
+    .select('*, clientes(razon_social), proveedores(razon_social)')
+    .order('fecha_vencimiento', { ascending: true });
+
+  if (error) {
+    document.getElementById('cartera-tbody').innerHTML =
+      '<tr><td colspan="7">Error cargando cartera: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  cartera_cache = data;
+  pintarCartera();
+}
+
+function pintarCartera() {
+  const lista = cartera_cache.filter(d => d.tipo === cartera_filtro_tipo);
+  pintarResumenCartera(lista);
+
+  const tbody = document.getElementById('cartera-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="7">No hay documentos en esta categoría.</td></tr>';
+    return;
+  }
+
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  tbody.innerHTML = lista.map(d => {
+    const tercero = d.tipo === 'por_cobrar' ? d.clientes?.razon_social : d.proveedores?.razon_social;
+    const vencido = d.estado !== 'pagado' && d.fecha_vencimiento && d.fecha_vencimiento < hoy;
+    const estadoMostrado = vencido ? 'vencido' : d.estado;
+    return `
+      <tr>
+        <td>${escapeHtml(d.concepto)}</td>
+        <td>${escapeHtml(tercero) || '—'}</td>
+        <td>$${Number(d.monto_original || 0).toFixed(2)}</td>
+        <td>$${Number(d.saldo_pendiente || 0).toFixed(2)}</td>
+        <td>${d.fecha_vencimiento || '—'}</td>
+        <td><span class="badge cartera-${estadoMostrado}">${ESTADO_CARTERA_LABELS[estadoMostrado] || estadoMostrado}</span></td>
+        <td class="row-actions">
+          <a onclick="abrirModalCartera('${d.id}')">Ver / abonar</a>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function pintarResumenCartera(lista) {
+  const totalOriginal = lista.reduce((acc, d) => acc + Number(d.monto_original || 0), 0);
+  const totalPendiente = lista.reduce((acc, d) => acc + Number(d.saldo_pendiente || 0), 0);
+  const totalCobrado = totalOriginal - totalPendiente;
+  const etiqueta = cartera_filtro_tipo === 'por_cobrar' ? 'cobrado' : 'pagado';
+
+  document.getElementById('cartera-resumen').innerHTML = `
+    <div class="resumen-card">
+      <div class="label">Total documentos</div>
+      <div class="valor">$${totalOriginal.toFixed(2)}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Saldo pendiente</div>
+      <div class="valor">$${totalPendiente.toFixed(2)}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Total ${etiqueta}</div>
+      <div class="valor">$${totalCobrado.toFixed(2)}</div>
+    </div>
+  `;
+}
+
+async function abrirModalCartera(id) {
+  modal_cartera_id = id || null;
+  modal_cartera_abonos = [];
+
+  let doc = id ? cartera_cache.find(d => d.id === id) : null;
+
+  if (id) {
+    const { data } = await sb
+      .from('cartera_abonos')
+      .select('*')
+      .eq('documento_id', id)
+      .order('fecha', { ascending: false });
+    modal_cartera_abonos = data || [];
+  }
+
+  pintarModalCartera(doc);
+}
+
+function pintarModalCartera(doc) {
+  const esEdicion = !!doc;
+  const tipoActual = doc?.tipo || cartera_filtro_tipo;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card wide">
+        <h3>${esEdicion ? 'Documento de cartera' : 'Nuevo documento de cartera'}</h3>
+        <div class="field-row">
+          <div>
+            <label>Tipo</label>
+            <select id="cart-tipo" onchange="onCambioTipoCartera()" ${esEdicion ? 'disabled' : ''}>
+              <option value="por_cobrar" ${tipoActual === 'por_cobrar' ? 'selected' : ''}>Por cobrar</option>
+              <option value="por_pagar" ${tipoActual === 'por_pagar' ? 'selected' : ''}>Por pagar</option>
+            </select>
+          </div>
+          <div id="cart-tercero-wrap"></div>
+        </div>
+        <div class="field-row">
+          <div id="cart-contrato-wrap"></div>
+        </div>
+        <label>Concepto</label>
+        <input type="text" id="cart-concepto" value="${escapeHtml(doc?.concepto)}" placeholder="ej. Anticipo contrato N.° 3" ${esEdicion ? 'disabled' : ''}>
+        <div class="field-row">
+          <div>
+            <label>Monto original</label>
+            <input type="text" id="cart-monto" value="${doc?.monto_original ?? ''}" placeholder="0.00" ${esEdicion ? 'disabled' : ''}>
+          </div>
+          <div>
+            <label>Fecha de emisión</label>
+            <input type="date" id="cart-fecha-emision" value="${doc?.fecha_emision || new Date().toISOString().slice(0,10)}" ${esEdicion ? 'disabled' : ''}>
+          </div>
+        </div>
+        <label>Fecha de vencimiento</label>
+        <input type="date" id="cart-fecha-vencimiento" value="${doc?.fecha_vencimiento || ''}" ${esEdicion ? 'disabled' : ''}>
+
+        ${esEdicion ? `
+          <div class="totales-box">
+            <div class="fila"><span>Monto original</span><span>$${Number(doc.monto_original).toFixed(2)}</span></div>
+            <div class="fila total"><span>Saldo pendiente</span><span id="cart-saldo-display">$${Number(doc.saldo_pendiente).toFixed(2)}</span></div>
+            <div class="saldo-bar"><div class="fill" style="width:${doc.monto_original ? (100 - (doc.saldo_pendiente / doc.monto_original * 100)) : 0}%"></div></div>
+          </div>
+
+          <label style="margin-top:20px;">Registrar abono</label>
+          <div class="field-row">
+            <div>
+              <input type="text" id="cart-abono-monto" placeholder="Monto del abono">
+            </div>
+            <div>
+              <input type="date" id="cart-abono-fecha" value="${new Date().toISOString().slice(0,10)}">
+            </div>
+            <div style="flex:0;">
+              <button class="btn" style="width:auto;white-space:nowrap;" onclick="registrarAbono()">Registrar</button>
+            </div>
+          </div>
+
+          <label style="margin-top:16px;">Historial de abonos</label>
+          <div id="cart-abonos-lista"></div>
+        ` : ''}
+
+        <div id="cart-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+          ${!esEdicion ? '<button class="btn" onclick="guardarDocumentoCartera()">Guardar</button>' : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  pintarTerceroCartera(tipoActual, doc);
+  if (tipoActual === 'por_cobrar') pintarContratoCartera(doc);
+  if (esEdicion) pintarAbonosLista();
+}
+
+function onCambioTipoCartera() {
+  const tipo = document.getElementById('cart-tipo').value;
+  pintarTerceroCartera(tipo, null);
+  document.getElementById('cart-contrato-wrap').innerHTML = '';
+  if (tipo === 'por_cobrar') pintarContratoCartera(null);
+}
+
+function pintarTerceroCartera(tipo, doc) {
+  const wrap = document.getElementById('cart-tercero-wrap');
+  if (tipo === 'por_cobrar') {
+    wrap.innerHTML = `
+      <label>Cliente</label>
+      <select id="cart-cliente" ${doc ? 'disabled' : ''}>
+        <option value="">Selecciona...</option>
+        ${clientes_cache.map(c => `<option value="${c.id}" ${doc?.cliente_id === c.id ? 'selected' : ''}>${escapeHtml(c.razon_social)}</option>`).join('')}
+      </select>
+    `;
+  } else {
+    wrap.innerHTML = `
+      <label>Proveedor</label>
+      <select id="cart-proveedor" ${doc ? 'disabled' : ''}>
+        <option value="">Selecciona...</option>
+        ${proveedores_cache.map(p => `<option value="${p.id}" ${doc?.proveedor_id === p.id ? 'selected' : ''}>${escapeHtml(p.razon_social)}</option>`).join('')}
+      </select>
+    `;
+  }
+}
+
+function pintarContratoCartera(doc) {
+  document.getElementById('cart-contrato-wrap').innerHTML = `
+    <div>
+      <label>Contrato relacionado (opcional)</label>
+      <select id="cart-contrato" ${doc ? 'disabled' : ''}>
+        <option value="">Sin contrato relacionado</option>
+        ${contratos_cache.map(c => `<option value="${c.id}" ${doc?.contrato_id === c.id ? 'selected' : ''}>N.° ${escapeHtml(c.numero)} — ${escapeHtml(c.clientes?.razon_social)}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
+async function guardarDocumentoCartera() {
+  const tipo = document.getElementById('cart-tipo').value;
+  const concepto = document.getElementById('cart-concepto').value.trim();
+  const montoOriginal = parseFloat(document.getElementById('cart-monto').value) || 0;
+
+  if (!concepto) {
+    showMsg('cart-msg', 'El concepto es obligatorio.', 'error');
+    return;
+  }
+  if (montoOriginal <= 0) {
+    showMsg('cart-msg', 'El monto original debe ser mayor a cero.', 'error');
+    return;
+  }
+
+  const payload = {
+    tipo: tipo,
+    concepto: concepto,
+    monto_original: montoOriginal,
+    saldo_pendiente: montoOriginal,
+    fecha_emision: document.getElementById('cart-fecha-emision').value || null,
+    fecha_vencimiento: document.getElementById('cart-fecha-vencimiento').value || null,
+    estado: 'pendiente'
+  };
+
+  if (tipo === 'por_cobrar') {
+    const clienteId = document.getElementById('cart-cliente').value;
+    if (!clienteId) { showMsg('cart-msg', 'Selecciona un cliente.', 'error'); return; }
+    payload.cliente_id = clienteId;
+    const contratoEl = document.getElementById('cart-contrato');
+    payload.contrato_id = contratoEl && contratoEl.value ? contratoEl.value : null;
+  } else {
+    const proveedorId = document.getElementById('cart-proveedor').value;
+    if (!proveedorId) { showMsg('cart-msg', 'Selecciona un proveedor.', 'error'); return; }
+    payload.proveedor_id = proveedorId;
+  }
+
+  const { error } = await sb.from('cartera_documentos').insert(payload);
+  if (error) {
+    showMsg('cart-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+
+  closeModal();
+  renderCartera();
+}
+
+function pintarAbonosLista() {
+  const cont = document.getElementById('cart-abonos-lista');
+  if (!modal_cartera_abonos.length) {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">No se han registrado abonos.</p>';
+    return;
+  }
+  cont.innerHTML = modal_cartera_abonos.map(a => `
+    <div class="abono-row">
+      <span>${a.fecha || '—'}</span>
+      <span>$${Number(a.monto).toFixed(2)}</span>
+    </div>
+  `).join('');
+}
+
+async function registrarAbono() {
+  const monto = parseFloat(document.getElementById('cart-abono-monto').value) || 0;
+  const fecha = document.getElementById('cart-abono-fecha').value;
+
+  if (monto <= 0) {
+    showMsg('cart-msg', 'Ingresa un monto de abono válido.', 'error');
+    return;
+  }
+
+  const doc = cartera_cache.find(d => d.id === modal_cartera_id);
+  if (monto > doc.saldo_pendiente) {
+    showMsg('cart-msg', 'El abono no puede ser mayor al saldo pendiente ($' + Number(doc.saldo_pendiente).toFixed(2) + ').', 'error');
+    return;
+  }
+
+  // Nota: movimiento_tesoreria_id queda en null por ahora — se vinculará
+  // cuando se construya el módulo de Tesorería.
+  const { error: abonoError } = await sb.from('cartera_abonos').insert({
+    documento_id: modal_cartera_id,
+    fecha: fecha || new Date().toISOString().slice(0, 10),
+    monto: monto
+  });
+
+  if (abonoError) {
+    showMsg('cart-msg', 'Error registrando abono: ' + abonoError.message, 'error');
+    return;
+  }
+
+  const nuevoSaldo = doc.saldo_pendiente - monto;
+  const nuevoEstado = nuevoSaldo <= 0 ? 'pagado' : 'parcial';
+
+  const { error: updateError } = await sb
+    .from('cartera_documentos')
+    .update({ saldo_pendiente: nuevoSaldo, estado: nuevoEstado })
+    .eq('id', modal_cartera_id);
+
+  if (updateError) {
+    showMsg('cart-msg', 'Abono registrado, pero hubo un error actualizando el saldo: ' + updateError.message, 'error');
+    return;
+  }
+
+  // Refrescar cache local y volver a pintar el modal con datos actualizados
+  doc.saldo_pendiente = nuevoSaldo;
+  doc.estado = nuevoEstado;
+
+  const { data } = await sb
+    .from('cartera_abonos')
+    .select('*')
+    .eq('documento_id', modal_cartera_id)
+    .order('fecha', { ascending: false });
+  modal_cartera_abonos = data || [];
+
+  pintarModalCartera(doc);
+}
 
 init();
 </script>
