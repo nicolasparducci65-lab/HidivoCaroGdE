@@ -4738,9 +4738,38 @@ async function enviarCorrespondenciaPorCorreo(id) {
     alert('Este registro no tiene correo de destinatario configurado.');
     return;
   }
-  if (!confirm('\u00bfEnviar este documento por correo a ' + registro.destinatario_email + '?')) return;
+  if (!registro.pdf_firmado_url) {
+    alert('Primero debes subir el PDF firmado de este documento antes de poder enviarlo por correo.');
+    return;
+  }
+  if (!confirm('¿Enviar este documento por correo a ' + registro.destinatario_email + '? Se adjuntará el PDF firmado y cualquier archivo extra registrado.')) return;
 
-  alert('El env\u00edo por correo requiere configurar el Edge Function de env\u00edo. Por ahora, puedes descargar el PDF firmado y enviarlo manualmente.');
+  const { data: { session } } = await sb.auth.getSession();
+
+  try {
+    const response = await fetch(SUPABASE_URL + '/functions/v1/enviar-correspondencia', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + session.access_token
+      },
+      body: JSON.stringify({ correspondencia_id: id })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      alert('Error: ' + (result.error || 'No se pudo enviar el correo.'));
+      return;
+    }
+
+    alert('Correspondencia enviada correctamente a ' + registro.destinatario_email + '.');
+    await cargarCorrespondencia();
+    abrirModalCorrespondencia(id);
+
+  } catch (err) {
+    alert('Error de conexión: ' + err.message);
+  }
 }
 
 function renderAdjuntosCorrespondencia(correspondenciaId) {
