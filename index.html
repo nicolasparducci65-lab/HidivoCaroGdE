@@ -4738,11 +4738,11 @@ async function enviarCorrespondenciaPorCorreo(id) {
     alert('Este registro no tiene correo de destinatario configurado.');
     return;
   }
-  if (!registro.pdf_firmado_url) {
-    alert('Primero debes subir el PDF firmado de este documento antes de poder enviarlo por correo.');
+  if (registro.tipo === 'oficio' && !registro.pdf_firmado_url) {
+    alert('Este es un Oficio: primero debes subir el PDF firmado antes de poder enviarlo por correo.');
     return;
   }
-  if (!confirm('¿Enviar este documento por correo a ' + registro.destinatario_email + '? Se adjuntará el PDF firmado y cualquier archivo extra registrado.')) return;
+  if (!confirm('¿Enviar este documento por correo a ' + registro.destinatario_email + '?')) return;
 
   const { data: { session } } = await sb.auth.getSession();
 
