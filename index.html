@@ -313,6 +313,464 @@
     color: white;
     border-color: var(--color-primary);
   }
+
+  /* ---- Contratos: tabs y comunicaciones ---- */
+  .modal-card.extra-wide { max-width: 860px; }
+  .tabs-bar {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 20px;
+  }
+  .tabs-bar button {
+    width: auto;
+    margin-top: 0;
+    padding: 10px 16px;
+    background: transparent;
+    color: var(--color-text-muted);
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    font-size: 14px;
+  }
+  .tabs-bar button.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 500;
+  }
+  .comunicacion-row {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .comunicacion-row .meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .comunicacion-row .meta-left {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+  }
+  .comunicacion-row .numero {
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .badge.direccion-enviada { background: #e6f1fb; color: #0c447c; }
+  .badge.direccion-recibida { background: #eeedfe; color: #3c3489; }
+  .badge.estado-pendiente { background: #faeeda; color: #854f0b; }
+  .badge.estado-respondida { background: #eaf3de; color: #3b6d11; }
+  .comunicacion-row .asunto {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+  .comunicacion-row .contenido {
+    font-size: 13px;
+    color: var(--color-text-muted);
+  }
+  .comunicacion-row .respuesta-de {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-top: 6px;
+    font-style: italic;
+  }
+  textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 70px;
+  }
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .checkbox-row input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+  }
+  .checkbox-row label {
+    margin: 0;
+  }
+
+  /* ---- Cartera ---- */
+  .badge.cartera-pendiente { background: #faeeda; color: #854f0b; }
+  .badge.cartera-parcial { background: #e6f1fb; color: #0c447c; }
+  .badge.cartera-pagado { background: #eaf3de; color: #3b6d11; }
+  .badge.cartera-vencido { background: #fcebeb; color: #a32d2d; }
+  .saldo-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--color-border);
+    border-radius: 100px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .saldo-bar .fill {
+    height: 100%;
+    background: var(--color-success);
+  }
+  .abono-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .abono-row:last-child { border-bottom: none; }
+  .resumen-cartera {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .resumen-card {
+    flex: 1;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 14px 18px;
+  }
+  .resumen-card .label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+  .resumen-card .valor {
+    font-size: 20px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  /* ---- Tesorería ---- */
+  .cuentas-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .cuenta-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .cuenta-card .nombre { font-size: 14px; font-weight: 500; }
+  .cuenta-card .banco { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+  .cuenta-card .saldo { font-size: 22px; font-weight: 600; margin-top: 10px; }
+  .cuenta-card.add-new {
+    border-style: dashed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 14px;
+  }
+  .subtabs-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .subtabs-bar button {
+    width: auto;
+    margin-top: 0;
+    padding: 8px 16px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    font-size: 13px;
+  }
+  .subtabs-bar button.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+  }
+  .badge.mov-ingreso { background: #eaf3de; color: #3b6d11; }
+  .badge.mov-egreso { background: #fcebeb; color: #a32d2d; }
+  .monto-ingreso { color: var(--color-success); font-weight: 500; }
+  .monto-egreso { color: var(--color-danger); font-weight: 500; }
+  .nomina-detalle-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 13px;
+  }
+  .nomina-detalle-row.header {
+    font-weight: 500;
+    color: var(--color-text-muted);
+    font-size: 12px;
+  }
+  .nomina-detalle-row input { padding: 6px 8px; font-size: 13px; }
+
+  /* ---- Chat ---- */
+  .chat-shell {
+    display: flex;
+    height: calc(100vh - 64px);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .chat-sidebar {
+    width: 220px;
+    border-right: 1px solid var(--color-border);
+    padding: 16px 0;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .chat-sidebar h4 {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    padding: 0 16px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .chat-canal-item {
+    padding: 9px 16px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .chat-canal-item.active { background: var(--color-bg); font-weight: 500; }
+  .chat-presencia-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    font-size: 13px;
+  }
+  .chat-presencia-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 100px;
+    background: var(--color-border);
+    flex-shrink: 0;
+  }
+  .chat-presencia-dot.online { background: var(--color-success); }
+  .chat-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-bubble {
+    max-width: 60%;
+    padding: 9px 13px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .chat-bubble.mine {
+    align-self: flex-end;
+    background: var(--color-primary);
+    color: white;
+  }
+  .chat-bubble.theirs {
+    align-self: flex-start;
+    background: var(--color-bg);
+  }
+  .chat-bubble .autor {
+    font-size: 11px;
+    font-weight: 500;
+    margin-bottom: 3px;
+    opacity: 0.8;
+  }
+  .chat-bubble .hora {
+    font-size: 10px;
+    opacity: 0.6;
+    margin-top: 3px;
+    text-align: right;
+  }
+  .chat-input-bar {
+    display: flex;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--color-border);
+  }
+  .chat-input-bar input {
+    flex: 1;
+  }
+  .chat-input-bar button {
+    width: auto;
+    margin-top: 0;
+    padding: 10px 20px;
+  }
+  .chat-bubble-wrap {
+    display: flex;
+    flex-direction: column;
+    max-width: 60%;
+    position: relative;
+  }
+  .chat-bubble-wrap.mine { align-self: flex-end; }
+  .chat-bubble-wrap.theirs { align-self: flex-start; }
+  .chat-bubble-wrap.hilo {
+    margin-left: 28px;
+    max-width: calc(60% - 28px);
+  }
+  .chat-hilo-indicador {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-bottom: 3px;
+    padding-left: 4px;
+  }
+  .chat-bubble {
+    padding: 9px 13px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+    position: relative;
+  }
+  .chat-bubble.mine {
+    background: var(--color-primary);
+    color: white;
+  }
+  .chat-bubble.theirs {
+    background: var(--color-bg);
+  }
+  .chat-bubble.eliminado {
+    background: transparent;
+    border: 1px dashed var(--color-border);
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+  .chat-bubble .autor {
+    font-size: 11px;
+    font-weight: 500;
+    margin-bottom: 3px;
+    opacity: 0.8;
+  }
+  .chat-bubble .hora {
+    font-size: 10px;
+    opacity: 0.6;
+    margin-top: 3px;
+    text-align: right;
+  }
+  .chat-bubble-actions {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    margin-top: 3px;
+    padding: 0 4px;
+  }
+  .chat-bubble-actions a {
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+  .chat-bubble-actions a:hover { color: var(--color-primary); }
+  .chat-bubble-actions.mine { justify-content: flex-end; }
+
+  .chat-thread-panel {
+    width: 340px;
+    border-left: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .chat-thread-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .chat-thread-header a {
+    cursor: pointer;
+    color: var(--color-text-muted);
+  }
+  .chat-thread-root {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg);
+  }
+  .chat-thread-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-respuestas-link {
+    font-size: 12px;
+    color: var(--color-primary);
+    cursor: pointer;
+    margin-top: 3px;
+    padding-left: 4px;
+  }
+
+  /* ---- Usuarios ---- */
+  .badge.rol-admin { background: #eeedfe; color: #3c3489; }
+  .badge.rol-ventas { background: #e6f1fb; color: #0c447c; }
+  .badge.rol-finanzas { background: #eaf3de; color: #3b6d11; }
+  .badge.rol-rrhh { background: #faeeda; color: #854f0b; }
+  .badge.rol-lectura { background: #f1efe8; color: #5f5e5a; }
+  .badge.rol-sin-asignar { background: #fcebeb; color: #a32d2d; }
+
+  /* ---- Adjuntos (componente reutilizable) ---- */
+  .adjuntos-wrap { margin-top: 16px; }
+  .adjuntos-lista { margin-bottom: 12px; }
+  .adjunto-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .adjunto-row .info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+  }
+  .adjunto-row .nombre {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 280px;
+  }
+  .adjunto-row .tamano {
+    color: var(--color-text-muted);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .adjunto-row .acciones { display: flex; gap: 10px; flex-shrink: 0; }
+  .adjunto-row .acciones a { color: var(--color-primary); cursor: pointer; }
+  .adjunto-row .acciones a.borrar { color: var(--color-danger); }
+  .adjuntos-drop {
+    border: 1px dashed var(--color-border);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+  .adjuntos-drop:hover { border-color: var(--color-primary); color: var(--color-primary); }
+  .adjuntos-drop input[type="file"] { display: none; }
 </style>
 </head>
 <body>
@@ -513,7 +971,12 @@ function renderModule(modulo) {
     servicios: renderServicios,
     clientes: renderClientes,
     proveedores: renderProveedores,
-    proformas: renderProformas
+    proformas: renderProformas,
+    contratos: renderContratos,
+    cartera: renderCartera,
+    tesoreria: renderTesoreria,
+    chat: renderChat,
+    usuarios: renderUsuarios
   };
 
   if (renderers[modulo]) {
@@ -788,6 +1251,7 @@ function abrirModalCliente(id) {
         </div>
         <label>Dirección</label>
         <input type="text" id="cli-direccion" value="${escapeHtml(cliente?.direccion)}">
+        ${esEdicion ? '<div id="cliente-adjuntos"></div>' : '<p style="font-size:12px;color:var(--color-text-muted);margin-top:16px;">Guarda el cliente primero para poder adjuntar archivos.</p>'}
         <div id="cli-msg"></div>
         <div class="modal-actions">
           <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -796,6 +1260,10 @@ function abrirModalCliente(id) {
       </div>
     </div>
   `;
+
+  if (esEdicion) {
+    renderAdjuntos('cliente-adjuntos', 'cliente', id);
+  }
 }
 
 async function guardarCliente(id) {
@@ -932,6 +1400,7 @@ function abrirModalProveedor(id) {
         <input type="text" id="prov-contacto-nombre" value="${escapeHtml(proveedor?.contacto_nombre)}">
         <label>Correo de contacto</label>
         <input type="text" id="prov-contacto-email" value="${escapeHtml(proveedor?.contacto_email)}">
+        ${esEdicion ? '<div id="proveedor-adjuntos"></div>' : '<p style="font-size:12px;color:var(--color-text-muted);margin-top:16px;">Guarda el proveedor primero para poder adjuntar archivos.</p>'}
         <div id="prov-msg"></div>
         <div class="modal-actions">
           <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -940,6 +1409,10 @@ function abrirModalProveedor(id) {
       </div>
     </div>
   `;
+
+  if (esEdicion) {
+    renderAdjuntos('proveedor-adjuntos', 'proveedor', id);
+  }
 }
 
 async function guardarProveedor(id) {
@@ -1163,6 +1636,8 @@ async function abrirModalProforma(id) {
           <div class="fila total"><span>Total</span><span id="prof-total-display">$0.00</span></div>
         </div>
 
+        ${modal_proforma_id ? '<div id="proforma-adjuntos"></div>' : '<p style="font-size:12px;color:var(--color-text-muted);margin-top:16px;">Guarda la proforma primero para poder adjuntar archivos.</p>'}
+
         <div id="prof-msg"></div>
         <div class="modal-actions">
           <button class="btn btn-secondary" onclick="closeModal()">${modal_proforma_bloqueada ? 'Cerrar' : 'Cancelar'}</button>
@@ -1176,6 +1651,10 @@ async function abrirModalProforma(id) {
     agregarItemProforma();
   } else {
     pintarItemsProforma();
+  }
+
+  if (modal_proforma_id) {
+    renderAdjuntos('proforma-adjuntos', 'proforma', modal_proforma_id);
   }
 }
 
@@ -1332,7 +1811,16 @@ async function convertirAContrato(proformaId) {
     return;
   }
 
+  // Calculamos el siguiente número correlativo de contrato consultando
+  // el máximo actual (mismo patrón usado en Proformas)
+  const { data: existentes } = await sb.from('contratos').select('numero');
+  const maxNumero = (existentes || []).reduce((max, c) => {
+    const n = parseInt(c.numero) || 0;
+    return Math.max(max, n);
+  }, 0);
+
   const payload = {
+    numero: String(maxNumero + 1),
     cliente_id: proforma.cliente_id,
     proforma_origen_id: proforma.id,
     monto_total: proforma.total,
@@ -1345,8 +1833,391 @@ async function convertirAContrato(proformaId) {
     return;
   }
 
-  alert('Contrato creado correctamente. Podrás verlo en el módulo de Contratos.');
+  alert('Contrato N.° ' + payload.numero + ' creado correctamente. Podrás verlo en el módulo de Contratos.');
   renderProformas();
+}
+
+// =====================================================================
+// MÓDULO: CONTRATOS (con Comunicaciones)
+// =====================================================================
+const ESTADO_CONTRATO_LABELS = { vigente: 'Vigente', cerrado: 'Cerrado', anulado: 'Anulado' };
+const ESTADO_CONTRATO_BADGE = { vigente: 'activo', cerrado: 'inactivo', anulado: 'inactivo' };
+const FORMA_PAGO_LABELS = { anticipo_saldo: 'Anticipo + saldo', cuotas: 'Cuotas', contraentrega: 'Contraentrega' };
+
+let contratos_cache = [];
+let modal_contrato_id = null;
+let modal_contrato_tab = 'datos';
+let modal_comunicaciones = [];
+
+async function renderContratos() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Contratos</h2>
+      <button class="btn" onclick="abrirModalContrato()">+ Nuevo contrato</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="contratos-search" placeholder="Buscar por número o cliente...">
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Cliente</th>
+          <th>Monto total</th>
+          <th>Forma de pago</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="contratos-tbody">
+        <tr><td colspan="6">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('contratos-search').addEventListener('input', (e) => {
+    pintarContratos(filtrar(contratos_cache, e.target.value, ['numero']));
+  });
+
+  if (!clientes_cache.length) {
+    const { data } = await sb.from('clientes').select('*').eq('activo', true);
+    clientes_cache = data || [];
+  }
+
+  const { data, error } = await sb
+    .from('contratos')
+    .select('*, clientes(razon_social)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    document.getElementById('contratos-tbody').innerHTML =
+      '<tr><td colspan="6">Error cargando contratos: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  contratos_cache = data;
+  pintarContratos(contratos_cache);
+}
+
+function pintarContratos(lista) {
+  const tbody = document.getElementById('contratos-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="6">No hay contratos registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(c => `
+    <tr>
+      <td>${escapeHtml(c.numero) || '—'}</td>
+      <td>${escapeHtml(c.clientes?.razon_social) || '—'}</td>
+      <td>$${Number(c.monto_total || 0).toFixed(2)}</td>
+      <td>${FORMA_PAGO_LABELS[c.forma_pago] || '—'}</td>
+      <td><span class="badge ${ESTADO_CONTRATO_BADGE[c.estado] || 'inactivo'}">${ESTADO_CONTRATO_LABELS[c.estado] || c.estado}</span></td>
+      <td class="row-actions">
+        <a onclick="abrirModalContrato('${c.id}')">Ver / editar</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function abrirModalContrato(id) {
+  modal_contrato_id = id || null;
+  modal_contrato_tab = 'datos';
+  modal_comunicaciones = [];
+
+  let contrato = id ? contratos_cache.find(c => c.id === id) : null;
+
+  if (id) {
+    const { data, error } = await sb
+      .from('contrato_comunicaciones')
+      .select('*')
+      .eq('contrato_id', id)
+      .order('numero', { ascending: false });
+    if (!error) modal_comunicaciones = data || [];
+  }
+
+  pintarModalContrato(contrato);
+}
+
+function pintarModalContrato(contrato) {
+  const esEdicion = !!contrato;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card extra-wide">
+        <h3>${esEdicion ? 'Contrato N.° ' + escapeHtml(contrato.numero) : 'Nuevo contrato'}</h3>
+        <div class="tabs-bar" id="contrato-tabs">
+          <button data-tab="datos" class="${modal_contrato_tab === 'datos' ? 'active' : ''}">Datos del contrato</button>
+          <button data-tab="comunicaciones" class="${modal_contrato_tab === 'comunicaciones' ? 'active' : ''}" ${!esEdicion ? 'disabled title="Guarda el contrato primero"' : ''}>
+            Comunicaciones ${modal_comunicaciones.length ? '(' + modal_comunicaciones.length + ')' : ''}
+          </button>
+        </div>
+        <div id="contrato-tab-content"></div>
+        <div id="contrato-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+          ${modal_contrato_tab === 'datos' ? '<button class="btn" onclick="guardarContrato()">Guardar</button>' : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('contrato-tabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.disabled) return;
+    modal_contrato_tab = btn.dataset.tab;
+    pintarModalContrato(contrato);
+  });
+
+  if (modal_contrato_tab === 'datos') {
+    pintarTabDatosContrato(contrato);
+  } else {
+    pintarTabComunicaciones(contrato);
+  }
+}
+
+function pintarTabDatosContrato(contrato) {
+  document.getElementById('contrato-tab-content').innerHTML = `
+    <div class="field-row">
+      <div>
+        <label>Cliente</label>
+        <select id="cont-cliente">
+          <option value="">Selecciona un cliente</option>
+          ${clientes_cache.map(c => `<option value="${c.id}" ${contrato?.cliente_id === c.id ? 'selected' : ''}>${escapeHtml(c.razon_social)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label>Estado</label>
+        <select id="cont-estado">
+          ${Object.entries(ESTADO_CONTRATO_LABELS).map(([k, v]) =>
+            `<option value="${k}" ${(contrato?.estado || 'vigente') === k ? 'selected' : ''}>${v}</option>`
+          ).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div>
+        <label>Monto total</label>
+        <input type="text" id="cont-monto" value="${contrato?.monto_total ?? ''}" placeholder="0.00">
+      </div>
+      <div>
+        <label>Forma de pago</label>
+        <select id="cont-forma-pago">
+          <option value="">Selecciona...</option>
+          ${Object.entries(FORMA_PAGO_LABELS).map(([k, v]) =>
+            `<option value="${k}" ${contrato?.forma_pago === k ? 'selected' : ''}>${v}</option>`
+          ).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div>
+        <label>Fecha de inicio</label>
+        <input type="date" id="cont-fecha-inicio" value="${contrato?.fecha_inicio || ''}">
+      </div>
+      <div>
+        <label>Fecha de fin</label>
+        <input type="date" id="cont-fecha-fin" value="${contrato?.fecha_fin || ''}">
+      </div>
+    </div>
+    <label>Referencia a proyecto en HIDIVO GdP (opcional)</label>
+    <input type="text" id="cont-proyecto-ref" value="${escapeHtml(contrato?.proyecto_gdp_ref)}" placeholder="ej. Parqueadero PTAR - SONGA">
+    ${contrato?.proforma_origen_id ? '<p style="font-size:12px;color:var(--color-text-muted);margin-top:8px;">Este contrato se generó a partir de una proforma aprobada.</p>' : ''}
+    ${contrato ? '<div id="contrato-adjuntos"></div>' : '<p style="font-size:12px;color:var(--color-text-muted);margin-top:16px;">Guarda el contrato primero para poder adjuntar archivos.</p>'}
+  `;
+
+  if (contrato) {
+    renderAdjuntos('contrato-adjuntos', 'contrato', contrato.id);
+  }
+}
+
+async function guardarContrato() {
+  const payload = {
+    cliente_id: document.getElementById('cont-cliente').value,
+    estado: document.getElementById('cont-estado').value,
+    monto_total: parseFloat(document.getElementById('cont-monto').value) || 0,
+    forma_pago: document.getElementById('cont-forma-pago').value || null,
+    fecha_inicio: document.getElementById('cont-fecha-inicio').value || null,
+    fecha_fin: document.getElementById('cont-fecha-fin').value || null,
+    proyecto_gdp_ref: document.getElementById('cont-proyecto-ref').value.trim() || null
+  };
+
+  if (!payload.cliente_id) {
+    showMsg('contrato-msg', 'Selecciona un cliente.', 'error');
+    return;
+  }
+
+  if (modal_contrato_id) {
+    const { error } = await sb.from('contratos').update(payload).eq('id', modal_contrato_id);
+    if (error) { showMsg('contrato-msg', 'Error: ' + error.message, 'error'); return; }
+  } else {
+    const maxNumero = contratos_cache.reduce((max, c) => Math.max(max, parseInt(c.numero) || 0), 0);
+    payload.numero = String(maxNumero + 1);
+    const { data, error } = await sb.from('contratos').insert(payload).select().single();
+    if (error) { showMsg('contrato-msg', 'Error: ' + error.message, 'error'); return; }
+    modal_contrato_id = data.id;
+  }
+
+  closeModal();
+  renderContratos();
+}
+
+// ---- Pestaña de Comunicaciones ----
+
+function pintarTabComunicaciones(contrato) {
+  document.getElementById('contrato-tab-content').innerHTML = `
+    <button class="btn btn-secondary" style="margin-bottom:16px;" onclick="abrirFormComunicacion()">+ Registrar comunicación</button>
+    <div id="comunicaciones-form-wrap"></div>
+    <div id="comunicaciones-lista"></div>
+  `;
+  pintarListaComunicaciones();
+}
+
+function pintarListaComunicaciones() {
+  const cont = document.getElementById('comunicaciones-lista');
+  if (!modal_comunicaciones.length) {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">No hay comunicaciones registradas para este contrato.</p>';
+    return;
+  }
+
+  cont.innerHTML = modal_comunicaciones.map(com => {
+    const respuestaDe = com.comunicacion_relacionada_id
+      ? modal_comunicaciones.find(c => c.id === com.comunicacion_relacionada_id)
+      : null;
+    const estadoBadge = com.estado_respuesta === 'pendiente'
+      ? '<span class="badge estado-pendiente">Pendiente de respuesta</span>'
+      : com.estado_respuesta === 'respondida'
+        ? '<span class="badge estado-respondida">Respondida</span>'
+        : '';
+
+    return `
+      <div class="comunicacion-row">
+        <div class="meta">
+          <div class="meta-left">
+            <span class="numero">N.° ${com.numero}</span>
+            <span class="badge direccion-${com.direccion}">${com.direccion === 'enviada' ? 'Enviada' : 'Recibida'}</span>
+            <span style="color:var(--color-text-muted);">${com.tipo || ''}</span>
+            <span style="color:var(--color-text-muted);">${com.fecha || ''}</span>
+          </div>
+          ${estadoBadge}
+        </div>
+        <div class="asunto">${escapeHtml(com.asunto)}</div>
+        <div class="contenido">${escapeHtml(com.contenido)}</div>
+        ${respuestaDe ? `<div class="respuesta-de">Responde a la comunicación N.° ${respuestaDe.numero}</div>` : ''}
+        <div id="com-adjuntos-${com.id}"></div>
+      </div>
+    `;
+  }).join('');
+
+  modal_comunicaciones.forEach(com => {
+    renderAdjuntos('com-adjuntos-' + com.id, 'comunicacion', com.id);
+  });
+}
+
+function abrirFormComunicacion() {
+  const pendientes = modal_comunicaciones.filter(c => c.estado_respuesta === 'pendiente');
+
+  document.getElementById('comunicaciones-form-wrap').innerHTML = `
+    <div class="comunicacion-row" style="background:var(--color-bg);">
+      <div class="field-row">
+        <div>
+          <label>Dirección</label>
+          <select id="com-direccion">
+            <option value="enviada">Enviada (HIDIVO → contraparte)</option>
+            <option value="recibida">Recibida (contraparte → HIDIVO)</option>
+          </select>
+        </div>
+        <div>
+          <label>Tipo</label>
+          <select id="com-tipo">
+            <option value="oficio">Oficio</option>
+            <option value="correo">Correo</option>
+            <option value="memorando">Memorando</option>
+            <option value="acta">Acta</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+      </div>
+      <label>Asunto</label>
+      <input type="text" id="com-asunto" placeholder="ej. Solicitud de prórroga de plazo">
+      <label>Contenido / resumen</label>
+      <textarea id="com-contenido" placeholder="Resumen del contenido de la comunicación"></textarea>
+      <div class="field-row">
+        <div>
+          <label>Remitente (si es recibida)</label>
+          <input type="text" id="com-remitente" placeholder="Nombre / cargo">
+        </div>
+        <div>
+          <label>Destinatario (si es enviada)</label>
+          <input type="text" id="com-destinatario" placeholder="Nombre / cargo">
+        </div>
+      </div>
+      <label>Fecha</label>
+      <input type="date" id="com-fecha" value="${new Date().toISOString().slice(0,10)}">
+      <div class="checkbox-row">
+        <input type="checkbox" id="com-requiere-respuesta">
+        <label for="com-requiere-respuesta">Esta comunicación requiere respuesta</label>
+      </div>
+      ${pendientes.length ? `
+        <label style="margin-top:16px;">¿Es respuesta a alguna comunicación pendiente?</label>
+        <select id="com-relacionada">
+          <option value="">No es respuesta a ninguna</option>
+          ${pendientes.map(p => `<option value="${p.id}">N.° ${p.numero} — ${escapeHtml(p.asunto)}</option>`).join('')}
+        </select>
+      ` : ''}
+      <div id="com-msg"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('comunicaciones-form-wrap').innerHTML=''">Cancelar</button>
+        <button class="btn" onclick="guardarComunicacion()">Registrar</button>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarComunicacion() {
+  const asunto = document.getElementById('com-asunto').value.trim();
+  if (!asunto) {
+    showMsg('com-msg', 'El asunto es obligatorio.', 'error');
+    return;
+  }
+
+  const maxNumero = modal_comunicaciones.reduce((max, c) => Math.max(max, c.numero || 0), 0);
+  const relacionadaEl = document.getElementById('com-relacionada');
+
+  const payload = {
+    contrato_id: modal_contrato_id,
+    numero: maxNumero + 1,
+    direccion: document.getElementById('com-direccion').value,
+    tipo: document.getElementById('com-tipo').value,
+    asunto: asunto,
+    contenido: document.getElementById('com-contenido').value.trim(),
+    remitente: document.getElementById('com-remitente').value.trim() || null,
+    destinatario: document.getElementById('com-destinatario').value.trim() || null,
+    fecha: document.getElementById('com-fecha').value || null,
+    requiere_respuesta: document.getElementById('com-requiere-respuesta').checked,
+    estado_respuesta: document.getElementById('com-requiere-respuesta').checked ? 'pendiente' : 'n/a',
+    comunicacion_relacionada_id: relacionadaEl && relacionadaEl.value ? relacionadaEl.value : null
+  };
+
+  const { error } = await sb.from('contrato_comunicaciones').insert(payload);
+  if (error) {
+    showMsg('com-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+
+  // Recargar comunicaciones (el trigger ya habrá marcado la original como respondida)
+  const { data } = await sb
+    .from('contrato_comunicaciones')
+    .select('*')
+    .eq('contrato_id', modal_contrato_id)
+    .order('numero', { ascending: false });
+  modal_comunicaciones = data || [];
+
+  document.getElementById('comunicaciones-form-wrap').innerHTML = '';
+  pintarListaComunicaciones();
+
+  // Refrescar el contador en la pestaña
+  const tabBtn = document.querySelector('#contrato-tabs button[data-tab="comunicaciones"]');
+  if (tabBtn) tabBtn.textContent = 'Comunicaciones (' + modal_comunicaciones.length + ')';
 }
 
 
@@ -1397,6 +2268,1945 @@ sb.auth.onAuthStateChange((event, session) => {
     showScreen('screen-login');
   }
 });
+
+// =====================================================================
+// MÓDULO: CARTERA (CxC y CxP)
+// =====================================================================
+const ESTADO_CARTERA_LABELS = { pendiente: 'Pendiente', parcial: 'Parcial', pagado: 'Pagado', vencido: 'Vencido' };
+let cartera_cache = [];
+let cartera_filtro_tipo = 'por_cobrar';
+let modal_cartera_id = null;
+let modal_cartera_abonos = [];
+
+async function renderCartera() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Cartera</h2>
+      <button class="btn" onclick="abrirModalCartera()">+ Nuevo documento</button>
+    </div>
+    <div class="filter-pills" id="cartera-filtros">
+      <button data-tipo="por_cobrar" class="active">Por cobrar</button>
+      <button data-tipo="por_pagar">Por pagar</button>
+    </div>
+    <div class="resumen-cartera" id="cartera-resumen"></div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Concepto</th>
+          <th>Cliente / proveedor</th>
+          <th>Monto original</th>
+          <th>Saldo pendiente</th>
+          <th>Vencimiento</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="cartera-tbody">
+        <tr><td colspan="7">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('cartera-filtros').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    document.querySelectorAll('#cartera-filtros button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    cartera_filtro_tipo = btn.dataset.tipo;
+    pintarCartera();
+  });
+
+  if (!clientes_cache.length) {
+    const { data } = await sb.from('clientes').select('*').eq('activo', true);
+    clientes_cache = data || [];
+  }
+  if (!proveedores_cache.length) {
+    const { data } = await sb.from('proveedores').select('*').eq('activo', true);
+    proveedores_cache = data || [];
+  }
+  if (!contratos_cache.length) {
+    const { data } = await sb.from('contratos').select('*, clientes(razon_social)');
+    contratos_cache = data || [];
+  }
+  if (!cuentas_bancarias_cache.length) {
+    const { data } = await sb.from('cuentas_bancarias').select('*');
+    cuentas_bancarias_cache = data || [];
+  }
+
+  const { data, error } = await sb
+    .from('cartera_documentos')
+    .select('*, clientes(razon_social), proveedores(razon_social)')
+    .order('fecha_vencimiento', { ascending: true });
+
+  if (error) {
+    document.getElementById('cartera-tbody').innerHTML =
+      '<tr><td colspan="7">Error cargando cartera: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  cartera_cache = data;
+  pintarCartera();
+}
+
+function pintarCartera() {
+  const lista = cartera_cache.filter(d => d.tipo === cartera_filtro_tipo);
+  pintarResumenCartera(lista);
+
+  const tbody = document.getElementById('cartera-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="7">No hay documentos en esta categoría.</td></tr>';
+    return;
+  }
+
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  tbody.innerHTML = lista.map(d => {
+    const tercero = d.tipo === 'por_cobrar' ? d.clientes?.razon_social : d.proveedores?.razon_social;
+    const vencido = d.estado !== 'pagado' && d.fecha_vencimiento && d.fecha_vencimiento < hoy;
+    const estadoMostrado = vencido ? 'vencido' : d.estado;
+    return `
+      <tr>
+        <td>${escapeHtml(d.concepto)}</td>
+        <td>${escapeHtml(tercero) || '—'}</td>
+        <td>$${Number(d.monto_original || 0).toFixed(2)}</td>
+        <td>$${Number(d.saldo_pendiente || 0).toFixed(2)}</td>
+        <td>${d.fecha_vencimiento || '—'}</td>
+        <td><span class="badge cartera-${estadoMostrado}">${ESTADO_CARTERA_LABELS[estadoMostrado] || estadoMostrado}</span></td>
+        <td class="row-actions">
+          <a onclick="abrirModalCartera('${d.id}')">Ver / abonar</a>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function pintarResumenCartera(lista) {
+  const totalOriginal = lista.reduce((acc, d) => acc + Number(d.monto_original || 0), 0);
+  const totalPendiente = lista.reduce((acc, d) => acc + Number(d.saldo_pendiente || 0), 0);
+  const totalCobrado = totalOriginal - totalPendiente;
+  const etiqueta = cartera_filtro_tipo === 'por_cobrar' ? 'cobrado' : 'pagado';
+
+  document.getElementById('cartera-resumen').innerHTML = `
+    <div class="resumen-card">
+      <div class="label">Total documentos</div>
+      <div class="valor">$${totalOriginal.toFixed(2)}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Saldo pendiente</div>
+      <div class="valor">$${totalPendiente.toFixed(2)}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Total ${etiqueta}</div>
+      <div class="valor">$${totalCobrado.toFixed(2)}</div>
+    </div>
+  `;
+}
+
+async function abrirModalCartera(id) {
+  modal_cartera_id = id || null;
+  modal_cartera_abonos = [];
+
+  let doc = id ? cartera_cache.find(d => d.id === id) : null;
+
+  if (id) {
+    const { data } = await sb
+      .from('cartera_abonos')
+      .select('*')
+      .eq('documento_id', id)
+      .order('fecha', { ascending: false });
+    modal_cartera_abonos = data || [];
+  }
+
+  pintarModalCartera(doc);
+}
+
+function pintarModalCartera(doc) {
+  const esEdicion = !!doc;
+  const tipoActual = doc?.tipo || cartera_filtro_tipo;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card wide">
+        <h3>${esEdicion ? 'Documento de cartera' : 'Nuevo documento de cartera'}</h3>
+        <div class="field-row">
+          <div>
+            <label>Tipo</label>
+            <select id="cart-tipo" onchange="onCambioTipoCartera()" ${esEdicion ? 'disabled' : ''}>
+              <option value="por_cobrar" ${tipoActual === 'por_cobrar' ? 'selected' : ''}>Por cobrar</option>
+              <option value="por_pagar" ${tipoActual === 'por_pagar' ? 'selected' : ''}>Por pagar</option>
+            </select>
+          </div>
+          <div id="cart-tercero-wrap"></div>
+        </div>
+        <div class="field-row">
+          <div id="cart-contrato-wrap"></div>
+        </div>
+        <label>Concepto</label>
+        <input type="text" id="cart-concepto" value="${escapeHtml(doc?.concepto)}" placeholder="ej. Anticipo contrato N.° 3" ${esEdicion ? 'disabled' : ''}>
+        <div class="field-row">
+          <div>
+            <label>Monto original</label>
+            <input type="text" id="cart-monto" value="${doc?.monto_original ?? ''}" placeholder="0.00" ${esEdicion ? 'disabled' : ''}>
+          </div>
+          <div>
+            <label>Fecha de emisión</label>
+            <input type="date" id="cart-fecha-emision" value="${doc?.fecha_emision || new Date().toISOString().slice(0,10)}" ${esEdicion ? 'disabled' : ''}>
+          </div>
+        </div>
+        <label>Fecha de vencimiento</label>
+        <input type="date" id="cart-fecha-vencimiento" value="${doc?.fecha_vencimiento || ''}" ${esEdicion ? 'disabled' : ''}>
+
+        ${esEdicion ? `
+          <div class="totales-box">
+            <div class="fila"><span>Monto original</span><span>$${Number(doc.monto_original).toFixed(2)}</span></div>
+            <div class="fila total"><span>Saldo pendiente</span><span id="cart-saldo-display">$${Number(doc.saldo_pendiente).toFixed(2)}</span></div>
+            <div class="saldo-bar"><div class="fill" style="width:${doc.monto_original ? (100 - (doc.saldo_pendiente / doc.monto_original * 100)) : 0}%"></div></div>
+          </div>
+
+          <label style="margin-top:20px;">Registrar abono</label>
+          <div class="field-row">
+            <div>
+              <input type="text" id="cart-abono-monto" placeholder="Monto del abono">
+            </div>
+            <div>
+              <input type="date" id="cart-abono-fecha" value="${new Date().toISOString().slice(0,10)}">
+            </div>
+          </div>
+          <label>Cuenta bancaria que ${doc.tipo === 'por_cobrar' ? 'recibe' : 'realiza'} el movimiento</label>
+          <div class="field-row">
+            <div>
+              <select id="cart-abono-cuenta">
+                <option value="">Selecciona una cuenta...</option>
+                ${cuentas_bancarias_cache.map(c => `<option value="${c.id}">${escapeHtml(c.nombre)} — ${escapeHtml(c.banco)}</option>`).join('')}
+              </select>
+            </div>
+            <div style="flex:0;">
+              <button class="btn" style="width:auto;white-space:nowrap;" onclick="registrarAbono()">Registrar</button>
+            </div>
+          </div>
+
+          <label style="margin-top:16px;">Historial de abonos</label>
+          <div id="cart-abonos-lista"></div>
+
+          <label style="margin-top:20px;">Facturas del SRI</label>
+          <div id="cart-facturas-lista"></div>
+          <div class="field-row">
+            <div>
+              <input type="text" id="cart-factura-numero" placeholder="N.° de factura (SRI)">
+            </div>
+            <div>
+              <input type="text" id="cart-factura-monto" placeholder="Monto">
+            </div>
+          </div>
+          <label class="adjuntos-drop" for="cart-factura-input" style="margin-top:8px;">
+            Click para seleccionar el archivo de la factura
+          </label>
+          <input type="file" id="cart-factura-input">
+          <button class="btn btn-secondary" style="margin-top:10px;" onclick="subirFacturaCartera()">Agregar factura</button>
+        ` : ''}
+
+        <div id="cart-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+          ${!esEdicion ? '<button class="btn" onclick="guardarDocumentoCartera()">Guardar</button>' : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  pintarTerceroCartera(tipoActual, doc);
+  if (tipoActual === 'por_cobrar') pintarContratoCartera(doc);
+  if (esEdicion) {
+    pintarAbonosLista();
+    cargarFacturasCartera();
+  }
+}
+
+function onCambioTipoCartera() {
+  const tipo = document.getElementById('cart-tipo').value;
+  pintarTerceroCartera(tipo, null);
+  document.getElementById('cart-contrato-wrap').innerHTML = '';
+  if (tipo === 'por_cobrar') pintarContratoCartera(null);
+}
+
+function pintarTerceroCartera(tipo, doc) {
+  const wrap = document.getElementById('cart-tercero-wrap');
+  if (tipo === 'por_cobrar') {
+    wrap.innerHTML = `
+      <label>Cliente</label>
+      <select id="cart-cliente" ${doc ? 'disabled' : ''}>
+        <option value="">Selecciona...</option>
+        ${clientes_cache.map(c => `<option value="${c.id}" ${doc?.cliente_id === c.id ? 'selected' : ''}>${escapeHtml(c.razon_social)}</option>`).join('')}
+      </select>
+    `;
+  } else {
+    wrap.innerHTML = `
+      <label>Proveedor</label>
+      <select id="cart-proveedor" ${doc ? 'disabled' : ''}>
+        <option value="">Selecciona...</option>
+        ${proveedores_cache.map(p => `<option value="${p.id}" ${doc?.proveedor_id === p.id ? 'selected' : ''}>${escapeHtml(p.razon_social)}</option>`).join('')}
+      </select>
+    `;
+  }
+}
+
+function pintarContratoCartera(doc) {
+  document.getElementById('cart-contrato-wrap').innerHTML = `
+    <div>
+      <label>Contrato relacionado (opcional)</label>
+      <select id="cart-contrato" ${doc ? 'disabled' : ''}>
+        <option value="">Sin contrato relacionado</option>
+        ${contratos_cache.map(c => `<option value="${c.id}" ${doc?.contrato_id === c.id ? 'selected' : ''}>N.° ${escapeHtml(c.numero)} — ${escapeHtml(c.clientes?.razon_social)}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
+async function guardarDocumentoCartera() {
+  const tipo = document.getElementById('cart-tipo').value;
+  const concepto = document.getElementById('cart-concepto').value.trim();
+  const montoOriginal = parseFloat(document.getElementById('cart-monto').value) || 0;
+
+  if (!concepto) {
+    showMsg('cart-msg', 'El concepto es obligatorio.', 'error');
+    return;
+  }
+  if (montoOriginal <= 0) {
+    showMsg('cart-msg', 'El monto original debe ser mayor a cero.', 'error');
+    return;
+  }
+
+  const payload = {
+    tipo: tipo,
+    concepto: concepto,
+    monto_original: montoOriginal,
+    saldo_pendiente: montoOriginal,
+    fecha_emision: document.getElementById('cart-fecha-emision').value || null,
+    fecha_vencimiento: document.getElementById('cart-fecha-vencimiento').value || null,
+    estado: 'pendiente'
+  };
+
+  if (tipo === 'por_cobrar') {
+    const clienteId = document.getElementById('cart-cliente').value;
+    if (!clienteId) { showMsg('cart-msg', 'Selecciona un cliente.', 'error'); return; }
+    payload.cliente_id = clienteId;
+    const contratoEl = document.getElementById('cart-contrato');
+    payload.contrato_id = contratoEl && contratoEl.value ? contratoEl.value : null;
+  } else {
+    const proveedorId = document.getElementById('cart-proveedor').value;
+    if (!proveedorId) { showMsg('cart-msg', 'Selecciona un proveedor.', 'error'); return; }
+    payload.proveedor_id = proveedorId;
+  }
+
+  const { error } = await sb.from('cartera_documentos').insert(payload);
+  if (error) {
+    showMsg('cart-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+
+  closeModal();
+  renderCartera();
+}
+
+function pintarAbonosLista() {
+  const cont = document.getElementById('cart-abonos-lista');
+  if (!modal_cartera_abonos.length) {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">No se han registrado abonos.</p>';
+    return;
+  }
+  cont.innerHTML = modal_cartera_abonos.map(a => `
+    <div class="abono-row">
+      <span>${a.fecha || '—'}</span>
+      <span>$${Number(a.monto).toFixed(2)}</span>
+    </div>
+  `).join('');
+}
+
+async function registrarAbono() {
+  const monto = parseFloat(document.getElementById('cart-abono-monto').value) || 0;
+  const fecha = document.getElementById('cart-abono-fecha').value;
+  const cuentaId = document.getElementById('cart-abono-cuenta').value;
+
+  if (monto <= 0) {
+    showMsg('cart-msg', 'Ingresa un monto de abono válido.', 'error');
+    return;
+  }
+  if (!cuentaId) {
+    showMsg('cart-msg', 'Selecciona la cuenta bancaria del movimiento.', 'error');
+    return;
+  }
+
+  const doc = cartera_cache.find(d => d.id === modal_cartera_id);
+  if (monto > doc.saldo_pendiente) {
+    showMsg('cart-msg', 'El abono no puede ser mayor al saldo pendiente ($' + Number(doc.saldo_pendiente).toFixed(2) + ').', 'error');
+    return;
+  }
+
+  const fechaFinal = fecha || new Date().toISOString().slice(0, 10);
+  const esIngreso = doc.tipo === 'por_cobrar';
+
+  // 1. Crear el movimiento de Tesorería correspondiente
+  const { data: movimiento, error: movError } = await sb
+    .from('tesoreria_movimientos')
+    .insert({
+      cuenta_id: cuentaId,
+      tipo: esIngreso ? 'ingreso' : 'egreso',
+      origen: esIngreso ? 'cartera_cxc' : 'cartera_cxp',
+      origen_id: modal_cartera_id,
+      monto: monto,
+      fecha: fechaFinal,
+      descripcion: doc.concepto
+    })
+    .select()
+    .single();
+
+  if (movError) {
+    showMsg('cart-msg', 'Error creando el movimiento de tesorería: ' + movError.message, 'error');
+    return;
+  }
+
+  // 2. Registrar el abono, vinculado al movimiento recién creado
+  const { error: abonoError } = await sb.from('cartera_abonos').insert({
+    documento_id: modal_cartera_id,
+    fecha: fechaFinal,
+    monto: monto,
+    movimiento_tesoreria_id: movimiento.id
+  });
+
+  if (abonoError) {
+    showMsg('cart-msg', 'El movimiento de tesorería se creó, pero hubo un error registrando el abono: ' + abonoError.message, 'error');
+    return;
+  }
+
+  // 3. Actualizar saldo de la cuenta bancaria
+  const cuenta = cuentas_bancarias_cache.find(c => c.id === cuentaId);
+  const nuevoSaldoCuenta = Number(cuenta.saldo_actual || 0) + (esIngreso ? monto : -monto);
+  await sb.from('cuentas_bancarias').update({ saldo_actual: nuevoSaldoCuenta }).eq('id', cuentaId);
+  cuenta.saldo_actual = nuevoSaldoCuenta;
+
+  // 4. Actualizar saldo y estado del documento de cartera
+  const nuevoSaldo = doc.saldo_pendiente - monto;
+  const nuevoEstado = nuevoSaldo <= 0 ? 'pagado' : 'parcial';
+
+  const { error: updateError } = await sb
+    .from('cartera_documentos')
+    .update({ saldo_pendiente: nuevoSaldo, estado: nuevoEstado })
+    .eq('id', modal_cartera_id);
+
+  if (updateError) {
+    showMsg('cart-msg', 'Abono registrado, pero hubo un error actualizando el saldo: ' + updateError.message, 'error');
+    return;
+  }
+
+  doc.saldo_pendiente = nuevoSaldo;
+  doc.estado = nuevoEstado;
+
+  const { data } = await sb
+    .from('cartera_abonos')
+    .select('*')
+    .eq('documento_id', modal_cartera_id)
+    .order('fecha', { ascending: false });
+  modal_cartera_abonos = data || [];
+
+  pintarModalCartera(doc);
+}
+
+// ---- Facturas del SRI asociadas a un documento de Cartera ----
+
+async function cargarFacturasCartera() {
+  const { data, error } = await sb
+    .from('cartera_facturas')
+    .select('*')
+    .eq('documento_id', modal_cartera_id)
+    .order('created_at', { ascending: false });
+
+  const cont = document.getElementById('cart-facturas-lista');
+  if (!cont) return;
+
+  if (error) {
+    cont.innerHTML = '<p style="color:var(--color-danger);font-size:12px;">Error: ' + escapeHtml(error.message) + '</p>';
+    return;
+  }
+
+  if (!data || !data.length) {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:12px;">No hay facturas registradas todavía.</p>';
+    return;
+  }
+
+  cont.innerHTML = data.map(f => `
+    <div class="adjunto-row">
+      <div class="info">
+        <span class="nombre">🧾 N.° ${escapeHtml(f.numero_factura) || '—'} — $${Number(f.monto || 0).toFixed(2)}</span>
+        <span class="tamano">${f.fecha || ''}</span>
+      </div>
+      <div class="acciones">
+        ${f.url ? `<a onclick="descargarFacturaCartera('${f.url}')">Descargar</a>` : ''}
+        <a class="borrar" onclick="borrarFacturaCartera('${f.id}', '${f.url || ''}')">Eliminar</a>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function subirFacturaCartera() {
+  const numero = document.getElementById('cart-factura-numero').value.trim();
+  const monto = parseFloat(document.getElementById('cart-factura-monto').value) || 0;
+  const file = document.getElementById('cart-factura-input').files[0];
+
+  if (!numero) {
+    showMsg('cart-msg', 'Ingresa el número de factura del SRI.', 'error');
+    return;
+  }
+
+  let rutaArchivo = null;
+  let nombreArchivo = null;
+  let tamanoBytes = null;
+
+  if (file) {
+    rutaArchivo = modal_cartera_id + '/' + Date.now() + '-' + file.name;
+    const { error: uploadError } = await sb.storage.from('cartera-facturas').upload(rutaArchivo, file);
+    if (uploadError) {
+      showMsg('cart-msg', 'Error subiendo el archivo: ' + uploadError.message, 'error');
+      return;
+    }
+    nombreArchivo = file.name;
+    tamanoBytes = file.size;
+  }
+
+  const { data: { user } } = await sb.auth.getUser();
+
+  const { error } = await sb.from('cartera_facturas').insert({
+    documento_id: modal_cartera_id,
+    numero_factura: numero,
+    monto: monto,
+    nombre_archivo: nombreArchivo,
+    url: rutaArchivo,
+    tamano_bytes: tamanoBytes,
+    creado_por: user.id
+  });
+
+  if (error) {
+    showMsg('cart-msg', 'Error registrando la factura: ' + error.message, 'error');
+    return;
+  }
+
+  document.getElementById('cart-factura-numero').value = '';
+  document.getElementById('cart-factura-monto').value = '';
+  document.getElementById('cart-factura-input').value = '';
+  showMsg('cart-msg', '', '');
+  cargarFacturasCartera();
+}
+
+async function descargarFacturaCartera(ruta) {
+  const { data, error } = await sb.storage.from('cartera-facturas').createSignedUrl(ruta, 60);
+  if (error) {
+    alert('Error generando el enlace de descarga: ' + error.message);
+    return;
+  }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function borrarFacturaCartera(facturaId, ruta) {
+  if (!confirm('¿Eliminar esta factura?')) return;
+
+  if (ruta) {
+    await sb.storage.from('cartera-facturas').remove([ruta]);
+  }
+
+  const { error } = await sb.from('cartera_facturas').delete().eq('id', facturaId);
+  if (error) {
+    alert('Error eliminando la factura: ' + error.message);
+    return;
+  }
+  cargarFacturasCartera();
+}
+
+// =====================================================================
+// MÓDULO: TESORERÍA (Cuentas, Movimientos, Nómina)
+// =====================================================================
+let cuentas_bancarias_cache = [];
+let movimientos_cache = [];
+let tesoreria_subtab = 'movimientos';
+
+async function renderTesoreria() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Tesorería</h2>
+    </div>
+    <div class="subtabs-bar" id="tesoreria-subtabs">
+      <button data-tab="movimientos" class="active">Movimientos</button>
+      <button data-tab="nomina">Nómina</button>
+    </div>
+    <div id="tesoreria-content"></div>
+  `;
+
+  document.getElementById('tesoreria-subtabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    document.querySelectorAll('#tesoreria-subtabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    tesoreria_subtab = btn.dataset.tab;
+    if (tesoreria_subtab === 'movimientos') renderTabMovimientos();
+    else renderTabNomina();
+  });
+
+  const { data: cuentas } = await sb.from('cuentas_bancarias').select('*').order('created_at');
+  cuentas_bancarias_cache = cuentas || [];
+
+  renderTabMovimientos();
+}
+
+// ---- Sub-tab: Movimientos ----
+
+async function renderTabMovimientos() {
+  const content = document.getElementById('tesoreria-content');
+  content.innerHTML = `
+    <div class="cuentas-grid" id="cuentas-grid"></div>
+    <div class="module-header">
+      <h2 style="font-size:15px;">Historial de movimientos</h2>
+      <button class="btn" onclick="abrirModalMovimiento()">+ Nuevo movimiento</button>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Cuenta</th>
+          <th>Tipo</th>
+          <th>Origen</th>
+          <th>Descripción</th>
+          <th>Monto</th>
+        </tr>
+      </thead>
+      <tbody id="movimientos-tbody">
+        <tr><td colspan="6">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  pintarCuentasGrid();
+
+  const { data, error } = await sb
+    .from('tesoreria_movimientos')
+    .select('*, cuentas_bancarias(nombre)')
+    .order('fecha', { ascending: false });
+
+  if (error) {
+    document.getElementById('movimientos-tbody').innerHTML =
+      '<tr><td colspan="6">Error cargando movimientos: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  movimientos_cache = data;
+  pintarMovimientos();
+}
+
+const ORIGEN_MOV_LABELS = { cartera_cxc: 'Cobro de cartera', cartera_cxp: 'Pago a proveedor', nomina: 'Nómina', otro: 'Otro' };
+
+function pintarCuentasGrid() {
+  const grid = document.getElementById('cuentas-grid');
+  grid.innerHTML = cuentas_bancarias_cache.map(c => `
+    <div class="cuenta-card">
+      <div class="nombre">${escapeHtml(c.nombre)}</div>
+      <div class="banco">${escapeHtml(c.banco)} ${escapeHtml(c.numero_cuenta)}</div>
+      <div class="saldo">$${Number(c.saldo_actual || 0).toFixed(2)}</div>
+    </div>
+  `).join('') + `
+    <div class="cuenta-card add-new" onclick="abrirModalCuenta()">+ Agregar cuenta bancaria</div>
+  `;
+}
+
+function pintarMovimientos() {
+  const tbody = document.getElementById('movimientos-tbody');
+  if (!movimientos_cache.length) {
+    tbody.innerHTML = '<tr><td colspan="6">No hay movimientos registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = movimientos_cache.map(m => `
+    <tr>
+      <td>${m.fecha || '—'}</td>
+      <td>${escapeHtml(m.cuentas_bancarias?.nombre) || '—'}</td>
+      <td><span class="badge mov-${m.tipo}">${m.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}</span></td>
+      <td>${ORIGEN_MOV_LABELS[m.origen] || m.origen || '—'}</td>
+      <td>${escapeHtml(m.descripcion) || '—'}</td>
+      <td class="monto-${m.tipo}">${m.tipo === 'ingreso' ? '+' : '-'}$${Number(m.monto || 0).toFixed(2)}</td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalCuenta() {
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>Nueva cuenta bancaria</h3>
+        <label>Nombre</label>
+        <input type="text" id="cuenta-nombre" placeholder="ej. Banco Pichincha - Cta Cte">
+        <label>Banco</label>
+        <input type="text" id="cuenta-banco" placeholder="ej. Banco Pichincha">
+        <label>Número de cuenta</label>
+        <input type="text" id="cuenta-numero" placeholder="ej. 1234567890">
+        <label>Saldo inicial</label>
+        <input type="text" id="cuenta-saldo" placeholder="0.00">
+        <div id="cuenta-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarCuenta()">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarCuenta() {
+  const nombre = document.getElementById('cuenta-nombre').value.trim();
+  if (!nombre) {
+    showMsg('cuenta-msg', 'El nombre es obligatorio.', 'error');
+    return;
+  }
+  const payload = {
+    nombre: nombre,
+    banco: document.getElementById('cuenta-banco').value.trim(),
+    numero_cuenta: document.getElementById('cuenta-numero').value.trim(),
+    saldo_actual: parseFloat(document.getElementById('cuenta-saldo').value) || 0
+  };
+  const { error } = await sb.from('cuentas_bancarias').insert(payload);
+  if (error) {
+    showMsg('cuenta-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  renderTesoreria();
+}
+
+function abrirModalMovimiento() {
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>Nuevo movimiento</h3>
+        <div class="field-row">
+          <div>
+            <label>Tipo</label>
+            <select id="mov-tipo">
+              <option value="ingreso">Ingreso</option>
+              <option value="egreso">Egreso</option>
+            </select>
+          </div>
+          <div>
+            <label>Cuenta</label>
+            <select id="mov-cuenta">
+              ${cuentas_bancarias_cache.map(c => `<option value="${c.id}">${escapeHtml(c.nombre)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <label>Descripción</label>
+        <input type="text" id="mov-descripcion" placeholder="ej. Pago de servicios básicos de oficina">
+        <div class="field-row">
+          <div>
+            <label>Monto</label>
+            <input type="text" id="mov-monto" placeholder="0.00">
+          </div>
+          <div>
+            <label>Fecha</label>
+            <input type="date" id="mov-fecha" value="${new Date().toISOString().slice(0,10)}">
+          </div>
+        </div>
+        <div id="mov-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarMovimiento()">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarMovimiento() {
+  const cuentaId = document.getElementById('mov-cuenta').value;
+  const tipo = document.getElementById('mov-tipo').value;
+  const monto = parseFloat(document.getElementById('mov-monto').value) || 0;
+  const fecha = document.getElementById('mov-fecha').value;
+
+  if (!cuentaId) { showMsg('mov-msg', 'Selecciona una cuenta.', 'error'); return; }
+  if (monto <= 0) { showMsg('mov-msg', 'Ingresa un monto válido.', 'error'); return; }
+
+  const { error } = await sb.from('tesoreria_movimientos').insert({
+    cuenta_id: cuentaId,
+    tipo: tipo,
+    origen: 'otro',
+    monto: monto,
+    fecha: fecha || null,
+    descripcion: document.getElementById('mov-descripcion').value.trim()
+  });
+
+  if (error) {
+    showMsg('mov-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+
+  const cuenta = cuentas_bancarias_cache.find(c => c.id === cuentaId);
+  const nuevoSaldo = Number(cuenta.saldo_actual || 0) + (tipo === 'ingreso' ? monto : -monto);
+  await sb.from('cuentas_bancarias').update({ saldo_actual: nuevoSaldo }).eq('id', cuentaId);
+
+  closeModal();
+  renderTesoreria();
+}
+
+// ---- Sub-tab: Nómina ----
+
+const TIPO_PERSONAL_LABELS = { planta_fija: 'Planta fija', por_proyecto: 'Por proyecto' };
+let empleados_cache = [];
+let roles_pago_cache = [];
+
+async function renderTabNomina() {
+  const content = document.getElementById('tesoreria-content');
+  content.innerHTML = `
+    <div class="module-header">
+      <h2 style="font-size:15px;">Empleados</h2>
+      <button class="btn" onclick="abrirModalEmpleado()">+ Nuevo empleado</button>
+    </div>
+    <table class="data-table" style="margin-bottom:28px;">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Cargo</th>
+          <th>Tipo</th>
+          <th>Contrato</th>
+          <th>Sueldo base</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="empleados-tbody">
+        <tr><td colspan="7">Cargando...</td></tr>
+      </tbody>
+    </table>
+
+    <div class="module-header">
+      <h2 style="font-size:15px;">Roles de pago</h2>
+      <button class="btn" onclick="abrirModalRolPago()">+ Nuevo rol de pago</button>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Periodo</th>
+          <th>Fecha de pago</th>
+          <th>Total</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="roles-pago-tbody">
+        <tr><td colspan="5">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  if (!contratos_cache.length) {
+    const { data } = await sb.from('contratos').select('*, clientes(razon_social)');
+    contratos_cache = data || [];
+  }
+
+  const { data: empleados, error: empError } = await sb
+    .from('empleados')
+    .select('*, contratos(numero)')
+    .order('created_at', { ascending: false });
+  if (!empError) empleados_cache = empleados || [];
+  pintarEmpleados();
+
+  const { data: roles, error: rolesError } = await sb
+    .from('nomina_roles_pago')
+    .select('*')
+    .order('periodo', { ascending: false });
+  if (!rolesError) roles_pago_cache = roles || [];
+  pintarRolesPago();
+}
+
+function pintarEmpleados() {
+  const tbody = document.getElementById('empleados-tbody');
+  if (!empleados_cache.length) {
+    tbody.innerHTML = '<tr><td colspan="7">No hay empleados registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = empleados_cache.map(e => `
+    <tr>
+      <td>${escapeHtml(e.nombre_completo)}</td>
+      <td>${escapeHtml(e.cargo)}</td>
+      <td>${TIPO_PERSONAL_LABELS[e.tipo_personal] || e.tipo_personal}</td>
+      <td>${e.contratos ? 'N.° ' + escapeHtml(e.contratos.numero) : '—'}</td>
+      <td>$${Number(e.sueldo_base || 0).toFixed(2)}</td>
+      <td><span class="badge ${e.activo ? 'activo' : 'inactivo'}">${e.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="row-actions">
+        <a onclick="abrirModalEmpleado('${e.id}')">Editar</a>
+        <a onclick="toggleActivoEmpleado('${e.id}', ${e.activo})">${e.activo ? 'Desactivar' : 'Activar'}</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalEmpleado(id) {
+  const empleado = id ? empleados_cache.find(e => e.id === id) : null;
+  const esEdicion = !!empleado;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>${esEdicion ? 'Editar empleado' : 'Nuevo empleado'}</h3>
+        <label>Nombre completo</label>
+        <input type="text" id="emp-nombre" value="${escapeHtml(empleado?.nombre_completo)}">
+        <div class="field-row">
+          <div>
+            <label>Cédula</label>
+            <input type="text" id="emp-cedula" value="${escapeHtml(empleado?.cedula)}">
+          </div>
+          <div>
+            <label>Cargo</label>
+            <input type="text" id="emp-cargo" value="${escapeHtml(empleado?.cargo)}">
+          </div>
+        </div>
+        <label>Tipo de personal</label>
+        <select id="emp-tipo" onchange="onCambioTipoEmpleado()">
+          <option value="planta_fija" ${(empleado?.tipo_personal || 'planta_fija') === 'planta_fija' ? 'selected' : ''}>Planta fija</option>
+          <option value="por_proyecto" ${empleado?.tipo_personal === 'por_proyecto' ? 'selected' : ''}>Por proyecto</option>
+        </select>
+        <div id="emp-contrato-wrap" style="${empleado?.tipo_personal === 'por_proyecto' ? '' : 'display:none;'}">
+          <label>Contrato asociado</label>
+          <select id="emp-contrato">
+            <option value="">Selecciona...</option>
+            ${contratos_cache.map(c => `<option value="${c.id}" ${empleado?.contrato_id === c.id ? 'selected' : ''}>N.° ${escapeHtml(c.numero)} — ${escapeHtml(c.clientes?.razon_social)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-row">
+          <div>
+            <label>Sueldo base</label>
+            <input type="text" id="emp-sueldo" value="${empleado?.sueldo_base ?? ''}" placeholder="0.00">
+          </div>
+          <div>
+            <label>Fecha de ingreso</label>
+            <input type="date" id="emp-fecha-ingreso" value="${empleado?.fecha_ingreso || ''}">
+          </div>
+        </div>
+        <label>Cuenta bancaria para pago</label>
+        <input type="text" id="emp-cuenta-bancaria" value="${escapeHtml(empleado?.cuenta_bancaria)}" placeholder="Número de cuenta del empleado">
+        <div id="emp-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarEmpleado(${esEdicion ? "'" + id + "'" : 'null'})">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function onCambioTipoEmpleado() {
+  const tipo = document.getElementById('emp-tipo').value;
+  document.getElementById('emp-contrato-wrap').style.display = tipo === 'por_proyecto' ? '' : 'none';
+}
+
+async function guardarEmpleado(id) {
+  const tipoPersonal = document.getElementById('emp-tipo').value;
+  const contratoEl = document.getElementById('emp-contrato');
+
+  const payload = {
+    nombre_completo: document.getElementById('emp-nombre').value.trim(),
+    cedula: document.getElementById('emp-cedula').value.trim(),
+    cargo: document.getElementById('emp-cargo').value.trim(),
+    tipo_personal: tipoPersonal,
+    contrato_id: tipoPersonal === 'por_proyecto' && contratoEl?.value ? contratoEl.value : null,
+    sueldo_base: parseFloat(document.getElementById('emp-sueldo').value) || 0,
+    fecha_ingreso: document.getElementById('emp-fecha-ingreso').value || null,
+    cuenta_bancaria: document.getElementById('emp-cuenta-bancaria').value.trim()
+  };
+
+  if (!payload.nombre_completo) {
+    showMsg('emp-msg', 'El nombre es obligatorio.', 'error');
+    return;
+  }
+
+  const query = id
+    ? sb.from('empleados').update(payload).eq('id', id)
+    : sb.from('empleados').insert(payload);
+
+  const { error } = await query;
+  if (error) {
+    showMsg('emp-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  renderTabNomina();
+}
+
+async function toggleActivoEmpleado(id, activoActual) {
+  const { error } = await sb.from('empleados').update({ activo: !activoActual }).eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  renderTabNomina();
+}
+
+const ESTADO_ROL_LABELS = { borrador: 'Borrador', aprobado: 'Aprobado', pagado: 'Pagado' };
+const ESTADO_ROL_BADGE = { borrador: 'inactivo', aprobado: 'cartera-parcial', pagado: 'activo' };
+let modal_rol_pago_id = null;
+let modal_rol_detalle = [];
+
+function pintarRolesPago() {
+  const tbody = document.getElementById('roles-pago-tbody');
+  if (!roles_pago_cache.length) {
+    tbody.innerHTML = '<tr><td colspan="5">No hay roles de pago registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = roles_pago_cache.map(r => `
+    <tr>
+      <td>${escapeHtml(r.periodo)}</td>
+      <td>${r.fecha_pago || '—'}</td>
+      <td>$${Number(r.total_pagado || 0).toFixed(2)}</td>
+      <td><span class="badge ${ESTADO_ROL_BADGE[r.estado] || 'inactivo'}">${ESTADO_ROL_LABELS[r.estado] || r.estado}</span></td>
+      <td class="row-actions">
+        <a onclick="abrirModalRolPago('${r.id}')">${r.estado === 'pagado' ? 'Ver' : 'Editar'}</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function abrirModalRolPago(id) {
+  modal_rol_pago_id = id || null;
+  let rol = id ? roles_pago_cache.find(r => r.id === id) : null;
+  modal_rol_detalle = [];
+
+  if (!empleados_cache.length) {
+    const { data } = await sb.from('empleados').select('*').eq('activo', true);
+    empleados_cache = data || [];
+  }
+
+  if (id) {
+    const { data } = await sb
+      .from('nomina_detalle')
+      .select('*, empleados(nombre_completo)')
+      .eq('rol_pago_id', id);
+    modal_rol_detalle = data || [];
+  } else {
+    // Pre-cargar todos los empleados activos con su sueldo base
+    modal_rol_detalle = empleados_cache.filter(e => e.activo).map(e => ({
+      empleado_id: e.id,
+      empleados: { nombre_completo: e.nombre_completo },
+      sueldo: e.sueldo_base || 0,
+      otros_ingresos: 0,
+      deducciones: 0
+    }));
+  }
+
+  pintarModalRolPago(rol);
+}
+
+function pintarModalRolPago(rol) {
+  const esEdicion = !!rol;
+  const bloqueado = rol?.estado === 'pagado';
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card extra-wide">
+        <h3>${esEdicion ? 'Rol de pago — ' + escapeHtml(rol.periodo) : 'Nuevo rol de pago'}</h3>
+        ${bloqueado ? '<div class="readonly-banner">Este rol ya fue pagado. Los montos quedaron congelados y los movimientos de tesorería ya se generaron.</div>' : ''}
+        <div class="field-row">
+          <div>
+            <label>Periodo</label>
+            <input type="text" id="rol-periodo" value="${escapeHtml(rol?.periodo) || ''}" placeholder="ej. 2026-06" ${bloqueado ? 'disabled' : ''}>
+          </div>
+          <div>
+            <label>Fecha de pago</label>
+            <input type="date" id="rol-fecha-pago" value="${rol?.fecha_pago || ''}" ${bloqueado ? 'disabled' : ''}>
+          </div>
+        </div>
+
+        <label style="margin-top:16px;">Detalle por empleado</label>
+        <div class="nomina-detalle-row header">
+          <div>Empleado</div><div>Sueldo</div><div>Otros ingresos</div><div>Deducciones</div><div>Líquido a recibir</div>
+        </div>
+        <div id="rol-detalle-rows"></div>
+
+        <div class="totales-box">
+          <div class="fila total"><span>Total del rol</span><span id="rol-total-display">$0.00</span></div>
+        </div>
+
+        <div id="rol-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+          ${!bloqueado ? '<button class="btn btn-secondary" onclick="guardarRolPago(false)">Guardar borrador</button>' : ''}
+          ${!bloqueado ? '<button class="btn" onclick="pagarRolNomina()">Marcar como pagado</button>' : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  pintarDetalleRolPago(bloqueado);
+}
+
+function pintarDetalleRolPago(bloqueado) {
+  const cont = document.getElementById('rol-detalle-rows');
+  cont.innerHTML = modal_rol_detalle.map((d, idx) => {
+    const liquido = (parseFloat(d.sueldo) || 0) + (parseFloat(d.otros_ingresos) || 0) - (parseFloat(d.deducciones) || 0);
+    if (bloqueado) {
+      return `
+        <div class="nomina-detalle-row">
+          <div>${escapeHtml(d.empleados?.nombre_completo)}</div>
+          <div>$${Number(d.sueldo).toFixed(2)}</div>
+          <div>$${Number(d.otros_ingresos).toFixed(2)}</div>
+          <div>$${Number(d.deducciones).toFixed(2)}</div>
+          <div>$${liquido.toFixed(2)}</div>
+        </div>
+      `;
+    }
+    return `
+      <div class="nomina-detalle-row">
+        <div>${escapeHtml(d.empleados?.nombre_completo)}</div>
+        <div><input type="text" value="${d.sueldo}" onchange="actualizarDetalleRol(${idx}, 'sueldo', this.value)"></div>
+        <div><input type="text" value="${d.otros_ingresos}" onchange="actualizarDetalleRol(${idx}, 'otros_ingresos', this.value)"></div>
+        <div><input type="text" value="${d.deducciones}" onchange="actualizarDetalleRol(${idx}, 'deducciones', this.value)"></div>
+        <div>$${liquido.toFixed(2)}</div>
+      </div>
+    `;
+  }).join('');
+
+  calcularTotalRolPago();
+}
+
+function actualizarDetalleRol(idx, campo, valor) {
+  modal_rol_detalle[idx][campo] = valor;
+  pintarDetalleRolPago(false);
+}
+
+function calcularTotalRolPago() {
+  const total = modal_rol_detalle.reduce((acc, d) =>
+    acc + (parseFloat(d.sueldo) || 0) + (parseFloat(d.otros_ingresos) || 0) - (parseFloat(d.deducciones) || 0), 0);
+  document.getElementById('rol-total-display').textContent = '$' + total.toFixed(2);
+  return total;
+}
+
+async function guardarRolPago(seraPagado) {
+  const periodo = document.getElementById('rol-periodo').value.trim();
+  if (!periodo) {
+    showMsg('rol-msg', 'El periodo es obligatorio (ej. 2026-06).', 'error');
+    return;
+  }
+
+  const total = calcularTotalRolPago();
+  const payload = {
+    periodo: periodo,
+    fecha_pago: document.getElementById('rol-fecha-pago').value || null,
+    estado: seraPagado ? 'pagado' : 'borrador',
+    total_pagado: total
+  };
+
+  if (modal_rol_pago_id) {
+    const { error } = await sb.from('nomina_roles_pago').update(payload).eq('id', modal_rol_pago_id);
+    if (error) { showMsg('rol-msg', 'Error: ' + error.message, 'error'); return null; }
+  } else {
+    const { data, error } = await sb.from('nomina_roles_pago').insert(payload).select().single();
+    if (error) { showMsg('rol-msg', 'Error: ' + error.message, 'error'); return null; }
+    modal_rol_pago_id = data.id;
+  }
+
+  // Reescribir el detalle: borrar el anterior e insertar de nuevo
+  await sb.from('nomina_detalle').delete().eq('rol_pago_id', modal_rol_pago_id);
+
+  const detallePayload = modal_rol_detalle.map(d => ({
+    rol_pago_id: modal_rol_pago_id,
+    empleado_id: d.empleado_id,
+    sueldo: parseFloat(d.sueldo) || 0,
+    otros_ingresos: parseFloat(d.otros_ingresos) || 0,
+    deducciones: parseFloat(d.deducciones) || 0
+  }));
+
+  const { error: detalleError } = await sb.from('nomina_detalle').insert(detallePayload);
+  if (detalleError) {
+    showMsg('rol-msg', 'Rol guardado, pero hubo un error con el detalle: ' + detalleError.message, 'error');
+    return null;
+  }
+
+  return modal_rol_pago_id;
+}
+
+async function pagarRolNomina() {
+  const cuentaSelect = cuentas_bancarias_cache.length
+    ? cuentas_bancarias_cache.map((c, i) => `${i + 1}. ${c.nombre}`).join('\n')
+    : null;
+
+  if (!cuentaSelect) {
+    showMsg('rol-msg', 'Primero registra al menos una cuenta bancaria en la pestaña Movimientos.', 'error');
+    return;
+  }
+
+  const seleccion = prompt('¿Desde qué cuenta se pagará la nómina?\n\n' + cuentaSelect + '\n\nEscribe el número de la cuenta:');
+  const idx = parseInt(seleccion) - 1;
+  if (isNaN(idx) || !cuentas_bancarias_cache[idx]) {
+    showMsg('rol-msg', 'Selección de cuenta inválida. No se procesó el pago.', 'error');
+    return;
+  }
+  const cuenta = cuentas_bancarias_cache[idx];
+
+  if (!confirm('¿Confirmas el pago de la nómina del periodo desde la cuenta "' + cuenta.nombre + '"? Esto generará un movimiento de egreso por cada empleado.')) {
+    return;
+  }
+
+  const rolId = await guardarRolPago(true);
+  if (!rolId) return;
+
+  // Crear un movimiento de egreso por cada empleado del detalle
+  const fechaPago = document.getElementById('rol-fecha-pago').value || new Date().toISOString().slice(0, 10);
+  let totalPagado = 0;
+
+  for (const d of modal_rol_detalle) {
+    const liquido = (parseFloat(d.sueldo) || 0) + (parseFloat(d.otros_ingresos) || 0) - (parseFloat(d.deducciones) || 0);
+    totalPagado += liquido;
+
+    await sb.from('tesoreria_movimientos').insert({
+      cuenta_id: cuenta.id,
+      tipo: 'egreso',
+      origen: 'nomina',
+      origen_id: rolId,
+      monto: liquido,
+      fecha: fechaPago,
+      descripcion: 'Pago de nómina — ' + (d.empleados?.nombre_completo || '')
+    });
+  }
+
+  const nuevoSaldo = Number(cuenta.saldo_actual || 0) - totalPagado;
+  await sb.from('cuentas_bancarias').update({ saldo_actual: nuevoSaldo }).eq('id', cuenta.id);
+  cuenta.saldo_actual = nuevoSaldo;
+
+  alert('Nómina pagada correctamente. Se generaron ' + modal_rol_detalle.length + ' movimientos de egreso en Tesorería.');
+  closeModal();
+  renderTabNomina();
+}
+
+// =====================================================================
+// MÓDULO: CHAT
+// =====================================================================
+let chat_canal_id = null;
+let chat_mensajes_cache = [];
+let chat_perfiles_cache = {}; // id -> perfil, para mostrar nombres y presencia
+let chat_realtime_channel = null;
+let chat_presencia_channel = null;
+let chat_usuario_actual = null;
+
+async function renderChat() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="chat-shell">
+      <aside class="chat-sidebar">
+        <h4>Canales</h4>
+        <div class="chat-canal-item active">General</div>
+        <h4 style="margin-top:24px;">En línea ahora</h4>
+        <div id="chat-presencia-lista"></div>
+      </aside>
+      <div class="chat-main">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-bar">
+          <input type="text" id="chat-input" placeholder="Escribe un mensaje...">
+          <button class="btn" onclick="enviarMensajeChat()">Enviar</button>
+        </div>
+      </div>
+      <div class="chat-thread-panel hidden" id="chat-thread-panel">
+        <div class="chat-thread-header">
+          <span>Hilo</span>
+          <a onclick="cerrarHiloChat()">✕</a>
+        </div>
+        <div class="chat-thread-root" id="chat-thread-root"></div>
+        <div class="chat-thread-messages" id="chat-thread-messages"></div>
+        <div class="chat-input-bar">
+          <input type="text" id="chat-thread-input" placeholder="Responder en el hilo...">
+          <button class="btn" onclick="enviarRespuestaHilo()">Enviar</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') enviarMensajeChat();
+  });
+  document.getElementById('chat-thread-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') enviarRespuestaHilo();
+  });
+
+  const { data: { user } } = await sb.auth.getUser();
+  chat_usuario_actual = user;
+
+  // Cargar todos los perfiles (para mostrar nombres en mensajes y presencia)
+  const { data: perfiles } = await sb.from('perfiles').select('id, nombre_completo, email');
+  (perfiles || []).forEach(p => { chat_perfiles_cache[p.id] = p; });
+
+  // Asegurar que exista el canal "General"
+  let { data: canal } = await sb.from('canales_chat').select('*').eq('tipo', 'general').maybeSingle();
+  if (!canal) {
+    const { data: nuevoCanal } = await sb
+      .from('canales_chat')
+      .insert({ nombre: 'General', tipo: 'general' })
+      .select()
+      .single();
+    canal = nuevoCanal;
+  }
+  chat_canal_id = canal.id;
+
+  await cargarMensajesChat();
+  await marcarPresenciaEnLinea();
+  suscribirRealtimeChat();
+  suscribirPresenciaChat();
+}
+
+async function cargarMensajesChat() {
+  const { data, error } = await sb
+    .from('mensajes')
+    .select('*')
+    .eq('canal_id', chat_canal_id)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    document.getElementById('chat-messages').innerHTML =
+      '<p style="color:var(--color-danger);">Error cargando mensajes: ' + escapeHtml(error.message) + '</p>';
+    return;
+  }
+  chat_mensajes_cache = data || [];
+  pintarMensajesChat();
+}
+
+function pintarMensajesChat() {
+  const cont = document.getElementById('chat-messages');
+  if (!cont) return;
+
+  const raiz = chat_mensajes_cache.filter(m => !m.mensaje_padre_id);
+
+  if (!raiz.length) {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Aún no hay mensajes en este canal. ¡Sé el primero en escribir!</p>';
+    return;
+  }
+
+  cont.innerHTML = raiz.map(m => renderBurbujaChat(m)).join('');
+  cont.scrollTop = cont.scrollHeight;
+
+  // Si el hilo abierto sigue existiendo, refrescar su contenido también
+  if (chat_hilo_abierto_id) {
+    pintarPanelHilo();
+  }
+}
+
+function contarRespuestas(mensajeId) {
+  return chat_mensajes_cache.filter(m => m.mensaje_padre_id === mensajeId && !m.eliminado).length;
+}
+
+function renderBurbujaChat(m) {
+  const esMio = m.autor_id === chat_usuario_actual?.id;
+  const autor = chat_perfiles_cache[m.autor_id];
+  const nombreAutor = autor?.nombre_completo || autor?.email || 'Usuario';
+  const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) : '';
+  const lado = esMio ? 'mine' : 'theirs';
+  const numRespuestas = contarRespuestas(m.id);
+
+  if (m.eliminado) {
+    return `
+      <div class="chat-bubble-wrap ${lado}">
+        <div class="chat-bubble eliminado">Mensaje eliminado</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="chat-bubble-wrap ${lado}">
+      <div class="chat-bubble ${lado}">
+        ${!esMio ? '<div class="autor">' + escapeHtml(nombreAutor) + '</div>' : ''}
+        <div>${escapeHtml(m.contenido)}</div>
+        <div class="hora">${hora}</div>
+      </div>
+      <div class="chat-bubble-actions ${lado}">
+        <a onclick="abrirHiloChat('${m.id}')">Responder</a>
+        ${esMio ? '<a onclick="eliminarMensajeChat(\'' + m.id + '\')">Eliminar</a>' : ''}
+      </div>
+      ${numRespuestas > 0 ? `<div class="chat-respuestas-link" onclick="abrirHiloChat('${m.id}')">${numRespuestas} respuesta${numRespuestas > 1 ? 's' : ''}</div>` : ''}
+    </div>
+  `;
+}
+
+let chat_hilo_abierto_id = null;
+
+function abrirHiloChat(mensajeId) {
+  chat_hilo_abierto_id = mensajeId;
+  document.getElementById('chat-thread-panel').classList.remove('hidden');
+  pintarPanelHilo();
+  document.getElementById('chat-thread-input').focus();
+}
+
+function cerrarHiloChat() {
+  chat_hilo_abierto_id = null;
+  document.getElementById('chat-thread-panel').classList.add('hidden');
+}
+
+function pintarPanelHilo() {
+  if (!chat_hilo_abierto_id) return;
+  const raiz = chat_mensajes_cache.find(m => m.id === chat_hilo_abierto_id);
+  if (!raiz) { cerrarHiloChat(); return; }
+
+  document.getElementById('chat-thread-root').innerHTML = renderMensajeSimpleHilo(raiz);
+
+  const respuestas = chat_mensajes_cache
+    .filter(m => m.mensaje_padre_id === chat_hilo_abierto_id)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+  const cont = document.getElementById('chat-thread-messages');
+  if (!respuestas.length) {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:12px;">Aún no hay respuestas en este hilo.</p>';
+  } else {
+    cont.innerHTML = respuestas.map(m => renderMensajeSimpleHilo(m, true)).join('');
+  }
+  cont.scrollTop = cont.scrollHeight;
+}
+
+function renderMensajeSimpleHilo(m, conAccionEliminar) {
+  const esMio = m.autor_id === chat_usuario_actual?.id;
+  const autor = chat_perfiles_cache[m.autor_id];
+  const nombreAutor = autor?.nombre_completo || autor?.email || 'Usuario';
+  const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) : '';
+
+  if (m.eliminado) {
+    return `<div class="chat-bubble-wrap ${esMio ? 'mine' : 'theirs'}"><div class="chat-bubble eliminado">Mensaje eliminado</div></div>`;
+  }
+
+  return `
+    <div class="chat-bubble-wrap ${esMio ? 'mine' : 'theirs'}">
+      <div class="chat-bubble ${esMio ? 'mine' : 'theirs'}">
+        <div class="autor">${escapeHtml(nombreAutor)}</div>
+        <div>${escapeHtml(m.contenido)}</div>
+        <div class="hora">${hora}</div>
+      </div>
+      ${conAccionEliminar && esMio ? `<div class="chat-bubble-actions mine"><a onclick="eliminarMensajeChat('${m.id}')">Eliminar</a></div>` : ''}
+    </div>
+  `;
+}
+
+async function enviarRespuestaHilo() {
+  const input = document.getElementById('chat-thread-input');
+  const contenido = input.value.trim();
+  if (!contenido || !chat_hilo_abierto_id) return;
+
+  input.value = '';
+
+  const { error } = await sb.from('mensajes').insert({
+    canal_id: chat_canal_id,
+    autor_id: chat_usuario_actual.id,
+    contenido: contenido,
+    mensaje_padre_id: chat_hilo_abierto_id
+  });
+
+  if (error) {
+    alert('Error enviando respuesta: ' + error.message);
+  }
+}
+
+async function eliminarMensajeChat(mensajeId) {
+  const mensaje = chat_mensajes_cache.find(m => m.id === mensajeId);
+  const esRaiz = !mensaje.mensaje_padre_id;
+  const hijos = esRaiz ? chat_mensajes_cache.filter(m => m.mensaje_padre_id === mensajeId) : [];
+
+  const confirmacion = hijos.length
+    ? '¿Eliminar este mensaje? Tiene ' + hijos.length + ' respuesta(s) que también se eliminarán.'
+    : '¿Eliminar este mensaje? Quedará marcado como "Mensaje eliminado" para todos.';
+
+  if (!confirm(confirmacion)) return;
+
+  // El botón "Eliminar" solo se muestra en mensajes propios, así que el
+  // mensaje raíz siempre pertenece al usuario actual. Si tiene hijos
+  // (respuestas de cualquier persona), se eliminan en cascada también.
+  const { error: errorRaiz } = await sb
+    .from('mensajes')
+    .update({ eliminado: true, eliminado_en: new Date().toISOString() })
+    .eq('id', mensajeId)
+    .eq('autor_id', chat_usuario_actual.id);
+
+  if (errorRaiz) {
+    alert('Error eliminando mensaje: ' + errorRaiz.message);
+    return;
+  }
+
+  if (hijos.length) {
+    await sb
+      .from('mensajes')
+      .update({ eliminado: true, eliminado_en: new Date().toISOString() })
+      .in('id', hijos.map(h => h.id));
+  }
+
+  const idsAfectados = [mensajeId, ...hijos.map(h => h.id)];
+  idsAfectados.forEach(id => {
+    const idx = chat_mensajes_cache.findIndex(m => m.id === id);
+    if (idx !== -1) chat_mensajes_cache[idx].eliminado = true;
+  });
+  pintarMensajesChat();
+}
+
+async function enviarMensajeChat() {
+  const input = document.getElementById('chat-input');
+  const contenido = input.value.trim();
+  if (!contenido) return;
+
+  input.value = '';
+
+  const { error } = await sb.from('mensajes').insert({
+    canal_id: chat_canal_id,
+    autor_id: chat_usuario_actual.id,
+    contenido: contenido,
+    mensaje_padre_id: null
+  });
+
+  if (error) {
+    alert('Error enviando mensaje: ' + error.message);
+  }
+  // No recargamos manualmente — el mensaje propio también llega vía
+  // la suscripción Realtime, igual que los de otros usuarios.
+}
+
+function suscribirRealtimeChat() {
+  if (chat_realtime_channel) {
+    sb.removeChannel(chat_realtime_channel);
+  }
+
+  chat_realtime_channel = sb
+    .channel('mensajes-canal-' + chat_canal_id)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'mensajes',
+      filter: 'canal_id=eq.' + chat_canal_id
+    }, (payload) => {
+      chat_mensajes_cache.push(payload.new);
+      pintarMensajesChat();
+    })
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'mensajes',
+      filter: 'canal_id=eq.' + chat_canal_id
+    }, (payload) => {
+      const idx = chat_mensajes_cache.findIndex(m => m.id === payload.new.id);
+      if (idx !== -1) {
+        chat_mensajes_cache[idx] = payload.new;
+        pintarMensajesChat();
+      }
+    })
+    .subscribe();
+}
+
+async function marcarPresenciaEnLinea() {
+  await sb.from('presencia').upsert({
+    perfil_id: chat_usuario_actual.id,
+    en_linea: true,
+    ultima_actividad: new Date().toISOString()
+  });
+
+  // Marcar como desconectado al cerrar la pestaña/navegar fuera
+  window.addEventListener('beforeunload', () => {
+    sb.from('presencia').update({ en_linea: false }).eq('perfil_id', chat_usuario_actual.id);
+  });
+
+  await cargarPresenciaChat();
+}
+
+async function cargarPresenciaChat() {
+  const { data } = await sb.from('presencia').select('*').eq('en_linea', true);
+  pintarPresenciaChat(data || []);
+}
+
+function pintarPresenciaChat(lista) {
+  const cont = document.getElementById('chat-presencia-lista');
+  if (!cont) return;
+
+  if (!lista.length) {
+    cont.innerHTML = '<p style="font-size:12px;color:var(--color-text-muted);padding:0 16px;">Nadie en línea.</p>';
+    return;
+  }
+
+  cont.innerHTML = lista.map(p => {
+    const perfil = chat_perfiles_cache[p.perfil_id];
+    const nombre = perfil?.nombre_completo || perfil?.email || 'Usuario';
+    return `
+      <div class="chat-presencia-item">
+        <span class="chat-presencia-dot online"></span>
+        <span>${escapeHtml(nombre)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function suscribirPresenciaChat() {
+  if (chat_presencia_channel) {
+    sb.removeChannel(chat_presencia_channel);
+  }
+
+  chat_presencia_channel = sb
+    .channel('presencia-global')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'presencia'
+    }, () => {
+      cargarPresenciaChat();
+    })
+    .subscribe();
+}
+
+// =====================================================================
+// MÓDULO: USUARIOS
+// =====================================================================
+const ROL_LABELS = {
+  admin: 'Administrador',
+  ventas: 'Ventas',
+  finanzas: 'Finanzas',
+  rrhh: 'RRHH',
+  lectura: 'Lectura'
+};
+let usuarios_cache = [];
+let usuario_actual_rol = null;
+
+async function renderUsuarios() {
+  const main = document.getElementById('main-content');
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: miPerfil } = await sb.from('perfiles').select('rol').eq('id', user.id).single();
+  usuario_actual_rol = miPerfil?.rol;
+
+  const esAdmin = usuario_actual_rol === 'admin';
+
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Usuarios</h2>
+      ${esAdmin ? '<button class="btn" onclick="abrirModalInvitarUsuario()">+ Invitar usuario</button>' : ''}
+    </div>
+    ${!esAdmin ? '<div class="readonly-banner">Solo un administrador puede invitar usuarios o cambiar roles. Puedes ver la lista, pero no editarla.</div>' : ''}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Correo</th>
+          <th>Rol</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="usuarios-tbody">
+        <tr><td colspan="5">Cargando...</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  const { data, error } = await sb.from('perfiles').select('*').order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('usuarios-tbody').innerHTML =
+      '<tr><td colspan="5">Error cargando usuarios: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  usuarios_cache = data;
+  pintarUsuarios(esAdmin);
+}
+
+function pintarUsuarios(esAdmin) {
+  const tbody = document.getElementById('usuarios-tbody');
+  if (!usuarios_cache.length) {
+    tbody.innerHTML = '<tr><td colspan="5">No hay usuarios registrados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = usuarios_cache.map(u => {
+    const rolBadge = u.rol ? 'rol-' + u.rol : 'rol-sin-asignar';
+    const rolTexto = u.rol ? ROL_LABELS[u.rol] || u.rol : 'Sin asignar';
+    return `
+      <tr>
+        <td>${escapeHtml(u.nombre_completo) || '—'}</td>
+        <td>${escapeHtml(u.email)}</td>
+        <td><span class="badge ${rolBadge}">${rolTexto}</span></td>
+        <td><span class="badge ${u.activo ? 'activo' : 'inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+        <td class="row-actions">
+          ${esAdmin ? `<a onclick="abrirModalEditarUsuario('${u.id}')">Editar</a>` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function abrirModalEditarUsuario(id) {
+  const usuario = usuarios_cache.find(u => u.id === id);
+  if (!usuario) return;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>${escapeHtml(usuario.nombre_completo) || escapeHtml(usuario.email)}</h3>
+        <label>Correo</label>
+        <input type="text" value="${escapeHtml(usuario.email)}" disabled>
+        <label>Rol</label>
+        <select id="user-rol">
+          <option value="">Sin asignar</option>
+          ${Object.entries(ROL_LABELS).map(([k, v]) =>
+            `<option value="${k}" ${usuario.rol === k ? 'selected' : ''}>${v}</option>`
+          ).join('')}
+        </select>
+        <div id="user-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-secondary" onclick="toggleActivoUsuario('${id}', ${usuario.activo})">${usuario.activo ? 'Desactivar' : 'Activar'}</button>
+          <button class="btn" onclick="guardarRolUsuario('${id}')">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarRolUsuario(id) {
+  const rol = document.getElementById('user-rol').value || null;
+
+  // Salvaguarda: evitar que el único admin se quite a sí mismo el rol
+  // por accidente y quede el sistema sin nadie que pueda gestionar usuarios.
+  const esUnoMismo = usuarios_cache.find(u => u.id === id)?.email === chat_usuario_actual?.email;
+  if (esUnoMismo && rol !== 'admin') {
+    const otrosAdmins = usuarios_cache.filter(u => u.rol === 'admin' && u.id !== id);
+    if (otrosAdmins.length === 0) {
+      showMsg('user-msg', 'No puedes quitarte el rol de admin si eres el único administrador del sistema.', 'error');
+      return;
+    }
+  }
+
+  const { error } = await sb.from('perfiles').update({ rol: rol }).eq('id', id);
+  if (error) {
+    showMsg('user-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  renderUsuarios();
+}
+
+async function toggleActivoUsuario(id, activoActual) {
+  const { error } = await sb.from('perfiles').update({ activo: !activoActual }).eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  closeModal();
+  renderUsuarios();
+}
+
+function abrirModalInvitarUsuario() {
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>Invitar nuevo usuario</h3>
+        <label>Correo electrónico</label>
+        <input type="email" id="invitar-email" placeholder="nombre@hidivo.com">
+        <p style="font-size:12px;color:var(--color-text-muted);margin-top:8px;">
+          Se le enviará un correo de invitación. Al aceptarlo, podrá completar su perfil y definir su contraseña.
+        </p>
+        <div id="invitar-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" id="btn-confirmar-invitar" onclick="enviarInvitacion()">Enviar invitación</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function enviarInvitacion() {
+  const email = document.getElementById('invitar-email').value.trim();
+  if (!email) {
+    showMsg('invitar-msg', 'Ingresa un correo electrónico.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-confirmar-invitar');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+
+  const { data: { session } } = await sb.auth.getSession();
+
+  try {
+    const response = await fetch(SUPABASE_URL + '/functions/v1/invitar-usuario', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + session.access_token
+      },
+      body: JSON.stringify({
+        email: email,
+        redirectTo: window.location.origin + window.location.pathname
+      })
+    });
+
+    const result = await response.json();
+
+    btn.disabled = false;
+    btn.textContent = 'Enviar invitación';
+
+    if (!response.ok) {
+      showMsg('invitar-msg', 'Error: ' + (result.error || 'No se pudo enviar la invitación.'), 'error');
+      return;
+    }
+
+    showMsg('invitar-msg', 'Invitación enviada correctamente a ' + email + '.', 'success');
+    setTimeout(() => { closeModal(); renderUsuarios(); }, 1500);
+
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Enviar invitación';
+    showMsg('invitar-msg', 'Error de conexión: ' + err.message, 'error');
+  }
+}
+
+// =====================================================================
+// COMPONENTE REUTILIZABLE: ADJUNTOS DE ARCHIVOS
+//
+// Se usa en 6 lugares: Proformas, Contratos, Comunicaciones, Cartera
+// (facturas), Clientes y Proveedores. Cada uno define su configuración
+// (bucket, tabla, columna FK) y este componente se encarga del resto:
+// subir a Storage, registrar en la tabla, listar, descargar y borrar.
+// =====================================================================
+
+const ADJUNTOS_CONFIG = {
+  proforma: { bucket: 'proformas-adjuntos', tabla: 'proforma_archivos', fk: 'proforma_id' },
+  contrato: { bucket: 'contratos-pdf', tabla: 'contrato_archivos', fk: 'contrato_id' },
+  comunicacion: { bucket: 'comunicaciones-adjuntos', tabla: 'contrato_comunicacion_archivos', fk: 'comunicacion_id' },
+  cliente: { bucket: 'clientes-adjuntos', tabla: 'cliente_archivos', fk: 'cliente_id' },
+  proveedor: { bucket: 'proveedores-adjuntos', tabla: 'proveedor_archivos', fk: 'proveedor_id' },
+};
+
+function formatearTamano(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// Renderiza el bloque completo de adjuntos (lista + zona de subida)
+// dentro del elemento con id = containerId. tipo es una clave de
+// ADJUNTOS_CONFIG, entidadId es el id del registro padre (proforma,
+// contrato, etc.)
+async function renderAdjuntos(containerId, tipo, entidadId) {
+  const cfg = ADJUNTOS_CONFIG[tipo];
+  const cont = document.getElementById(containerId);
+  if (!cont || !cfg) return;
+
+  cont.innerHTML = `
+    <div class="adjuntos-wrap">
+      <label>Archivos adjuntos</label>
+      <div class="adjuntos-lista" id="${containerId}-lista">Cargando...</div>
+      <label class="adjuntos-drop" for="${containerId}-input">
+        Click para seleccionar un archivo, o arrástralo aquí
+      </label>
+      <input type="file" id="${containerId}-input" onchange="subirAdjunto('${containerId}', '${tipo}', '${entidadId}', this.files[0])">
+      <div id="${containerId}-msg"></div>
+    </div>
+  `;
+
+  await cargarAdjuntos(containerId, tipo, entidadId);
+}
+
+async function cargarAdjuntos(containerId, tipo, entidadId) {
+  const cfg = ADJUNTOS_CONFIG[tipo];
+  const { data, error } = await sb
+    .from(cfg.tabla)
+    .select('*')
+    .eq(cfg.fk, entidadId)
+    .order('created_at', { ascending: false });
+
+  const lista = document.getElementById(containerId + '-lista');
+  if (!lista) return;
+
+  if (error) {
+    lista.innerHTML = '<p style="color:var(--color-danger);font-size:12px;">Error cargando archivos: ' + escapeHtml(error.message) + '</p>';
+    return;
+  }
+
+  if (!data || !data.length) {
+    lista.innerHTML = '<p style="color:var(--color-text-muted);font-size:12px;">No hay archivos adjuntos todavía.</p>';
+    return;
+  }
+
+  lista.innerHTML = data.map(a => `
+    <div class="adjunto-row">
+      <div class="info">
+        <span class="nombre">📎 ${escapeHtml(a.nombre_archivo)}</span>
+        <span class="tamano">${formatearTamano(a.tamano_bytes)}</span>
+      </div>
+      <div class="acciones">
+        <a onclick="descargarAdjunto('${tipo}', '${a.url}')">Descargar</a>
+        <a class="borrar" onclick="borrarAdjunto('${containerId}', '${tipo}', '${entidadId}', '${a.id}', '${a.url}')">Eliminar</a>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function subirAdjunto(containerId, tipo, entidadId, file) {
+  if (!file) return;
+  const cfg = ADJUNTOS_CONFIG[tipo];
+  const msgId = containerId + '-msg';
+
+  document.getElementById(msgId).innerHTML = '<p style="font-size:12px;color:var(--color-text-muted);">Subiendo...</p>';
+
+  // Ruta única dentro del bucket: entidadId/timestamp-nombrearchivo,
+  // para evitar colisiones entre archivos del mismo nombre.
+  const rutaArchivo = entidadId + '/' + Date.now() + '-' + file.name;
+
+  const { error: uploadError } = await sb.storage
+    .from(cfg.bucket)
+    .upload(rutaArchivo, file);
+
+  if (uploadError) {
+    document.getElementById(msgId).innerHTML = '<p style="font-size:12px;color:var(--color-danger);">Error subiendo archivo: ' + escapeHtml(uploadError.message) + '</p>';
+    return;
+  }
+
+  const { data: { user } } = await sb.auth.getUser();
+
+  const registro = {
+    [cfg.fk]: entidadId,
+    nombre_archivo: file.name,
+    url: rutaArchivo,
+    tamano_bytes: file.size,
+    tipo_archivo: file.type || null,
+  };
+  if (cfg.tabla !== 'contrato_comunicacion_archivos') {
+    registro.creado_por = user.id;
+  }
+
+  const { error: insertError } = await sb.from(cfg.tabla).insert(registro);
+
+  if (insertError) {
+    document.getElementById(msgId).innerHTML = '<p style="font-size:12px;color:var(--color-danger);">Archivo subido, pero hubo un error registrándolo: ' + escapeHtml(insertError.message) + '</p>';
+    return;
+  }
+
+  document.getElementById(msgId).innerHTML = '';
+  document.getElementById(containerId + '-input').value = '';
+  await cargarAdjuntos(containerId, tipo, entidadId);
+}
+
+async function descargarAdjunto(tipo, ruta) {
+  const cfg = ADJUNTOS_CONFIG[tipo];
+  const { data, error } = await sb.storage
+    .from(cfg.bucket)
+    .createSignedUrl(ruta, 60); // válido por 60 segundos
+
+  if (error) {
+    alert('Error generando el enlace de descarga: ' + error.message);
+    return;
+  }
+
+  window.open(data.signedUrl, '_blank');
+}
+
+async function borrarAdjunto(containerId, tipo, entidadId, registroId, ruta) {
+  if (!confirm('¿Eliminar este archivo? Esta acción no se puede deshacer.')) return;
+
+  const cfg = ADJUNTOS_CONFIG[tipo];
+
+  const { error: storageError } = await sb.storage.from(cfg.bucket).remove([ruta]);
+  if (storageError) {
+    alert('Error eliminando el archivo del almacenamiento: ' + storageError.message);
+    return;
+  }
+
+  const { error: dbError } = await sb.from(cfg.tabla).delete().eq('id', registroId);
+  if (dbError) {
+    alert('El archivo se eliminó del almacenamiento, pero hubo un error quitando el registro: ' + dbError.message);
+    return;
+  }
+
+  await cargarAdjuntos(containerId, tipo, entidadId);
+}
 
 init();
 </script>
