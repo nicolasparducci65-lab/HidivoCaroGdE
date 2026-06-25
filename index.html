@@ -3833,7 +3833,13 @@ async function enviarInvitacion() {
     btn.textContent = 'Enviar invitación';
 
     if (!response.ok) {
-      showMsg('invitar-msg', 'Error: ' + (result.error || 'No se pudo enviar la invitación.'), 'error');
+      let mensaje = result.error || 'No se pudo enviar la invitación.';
+      if (result.debug) {
+        mensaje += ' [Diagnóstico: userId=' + result.debug.userId + ', email=' + result.debug.userEmail +
+          ', perfilEncontrado=' + JSON.stringify(result.debug.perfilEncontrado) +
+          ', perfilError=' + result.debug.perfilError + ']';
+      }
+      showMsg('invitar-msg', mensaje, 'error');
       return;
     }
 
