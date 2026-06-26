@@ -85,13 +85,53 @@
   .msg.success { background: #eaf3de; color: var(--color-success); }
   .hidden { display: none !important; }
   #app-root { min-height: 100vh; }
-  .app-shell { display: flex; min-height: 100vh; }
+  .app-shell { display: flex; min-height: 100vh; position: relative; }
+  .mobile-topbar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .mobile-topbar .brand { font-weight: 600; font-size: 16px; }
+  .hamburger-btn {
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+  .hamburger-btn span {
+    width: 18px;
+    height: 2px;
+    background: var(--color-text);
+    border-radius: 2px;
+  }
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(44, 44, 42, 0.4);
+    z-index: 90;
+  }
   .sidebar {
     width: 220px;
     background: var(--color-surface);
     border-right: 1px solid var(--color-border);
     padding: 20px 0;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
   }
   .sidebar .brand {
     font-weight: 600;
@@ -112,6 +152,61 @@
     flex: 1;
     padding: 32px;
     overflow-y: auto;
+    min-width: 0;
+  }
+
+  /* ---- Responsive: tablet y móvil ---- */
+  @media (max-width: 900px) {
+    .mobile-topbar { display: flex; }
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      z-index: 100;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay.open { display: block; }
+    .main-content { padding: 18px; }
+  }
+  @media (max-width: 600px) {
+    .main-content { padding: 14px; }
+    .module-header { flex-wrap: wrap; gap: 10px; }
+    .field-row { flex-direction: column; gap: 0; }
+    .resumen-cartera { flex-direction: column; }
+    .cuentas-grid { grid-template-columns: 1fr; }
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .dashboard-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .modal-card, .modal-card.wide, .modal-card.oficio-wide, .modal-card.extra-wide {
+      max-width: 100%;
+      width: 100%;
+      max-height: 100vh;
+      height: 100vh;
+      border-radius: 0;
+    }
+    .modal-overlay { padding: 0; align-items: stretch; }
+    .data-table { font-size: 12px; }
+    .data-table th, .data-table td { padding: 8px 8px; }
+    .data-table {
+      display: block;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .data-table thead, .data-table tbody, .data-table tr {
+      display: table;
+      width: 100%;
+      table-layout: auto;
+    }
+    .correspondencia-filtros { flex-direction: column; }
+    .correspondencia-filtros select, .correspondencia-filtros input { width: 100%; min-width: 0; }
+    .chat-shell { flex-direction: column; height: auto; min-height: calc(100vh - 120px); }
+    .chat-sidebar { width: 100%; max-height: 160px; border-right: none; border-bottom: 1px solid var(--color-border); }
+    .chat-thread-panel { width: 100%; border-left: none; border-top: 1px solid var(--color-border); }
+    .nomina-detalle-row { grid-template-columns: 1fr; gap: 4px; }
+    .nomina-detalle-row.header { display: none; }
   }
 
   /* ---- Catálogo: tabla, modal, controles ---- */
@@ -298,6 +393,7 @@
     display: flex;
     gap: 8px;
     margin-bottom: 16px;
+    flex-wrap: wrap;
   }
   .filter-pills button {
     width: auto;
@@ -321,6 +417,7 @@
     gap: 4px;
     border-bottom: 1px solid var(--color-border);
     margin-bottom: 20px;
+    flex-wrap: wrap;
   }
   .tabs-bar button {
     width: auto;
@@ -479,6 +576,7 @@
     display: flex;
     gap: 8px;
     margin-bottom: 20px;
+    flex-wrap: wrap;
   }
   .subtabs-bar button {
     width: auto;
@@ -898,9 +996,16 @@
 
 <!-- ===================== APP PRINCIPAL ===================== -->
 <div id="screen-app" class="hidden">
+  <div class="mobile-topbar">
+    <div class="brand">CARO GdE</div>
+    <button class="hamburger-btn" id="btn-toggle-sidebar" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
   <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand" style="cursor:pointer;" onclick="renderDashboardInicio(); document.querySelectorAll('#main-nav a').forEach(a => a.classList.remove('active'));">CARO GdE</div>
+    <aside class="sidebar" id="main-sidebar">
+      <div class="brand" style="cursor:pointer;" onclick="renderDashboardInicio(); document.querySelectorAll('#main-nav a').forEach(a => a.classList.remove('active')); cerrarSidebarMobile();">CARO GdE</div>
       <nav id="main-nav">
         <a href="#" data-module="servicios">Servicios</a>
         <a href="#" data-module="clientes">Clientes</a>
@@ -1061,7 +1166,32 @@ document.getElementById('main-nav').addEventListener('click', (e) => {
 
   const modulo = link.dataset.module;
   renderModule(modulo);
+  cerrarSidebarMobile();
 });
+
+// =====================================================================
+// SIDEBAR MÓVIL: abrir/cerrar con botón hamburguesa y overlay
+// =====================================================================
+function abrirSidebarMobile() {
+  document.getElementById('main-sidebar').classList.add('open');
+  document.getElementById('sidebar-overlay').classList.add('open');
+}
+
+function cerrarSidebarMobile() {
+  document.getElementById('main-sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+
+document.getElementById('btn-toggle-sidebar').addEventListener('click', () => {
+  const sidebar = document.getElementById('main-sidebar');
+  if (sidebar.classList.contains('open')) {
+    cerrarSidebarMobile();
+  } else {
+    abrirSidebarMobile();
+  }
+});
+
+document.getElementById('sidebar-overlay').addEventListener('click', cerrarSidebarMobile);
 
 function renderModule(modulo) {
   const renderers = {
@@ -5073,6 +5203,7 @@ function irADashboardModulo(modulo) {
   const link = document.querySelector('#main-nav a[data-module="' + modulo + '"]');
   if (link) link.classList.add('active');
   renderModule(modulo);
+  cerrarSidebarMobile();
 }
 
 init();
