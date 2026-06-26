@@ -4634,7 +4634,7 @@ const LOGO_HIDIVO_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAkwAAA
 const TIPO_CORRESPONDENCIA_LABELS = { oficio: 'Oficio', correo: 'Correo', memorando: 'Memorando', acta: 'Acta', otro: 'Otro' };
 
 let correspondencia_cache = [];
-let correspondencia_filtros = { contrato_id: '', proveedor_id: '', es_contratista: '', cliente_id: '', fecha_desde: '', fecha_hasta: '' };
+let correspondencia_filtros = { direccion: '', contrato_id: '', proveedor_id: '', es_contratista: '', cliente_id: '', fecha_desde: '', fecha_hasta: '' };
 let modal_correspondencia_id = null;
 
 async function renderCorrespondencia() {
@@ -4643,6 +4643,11 @@ async function renderCorrespondencia() {
     <div class="module-header">
       <h2>Correspondencia</h2>
       <button class="btn" onclick="abrirModalCorrespondencia()">+ Nueva correspondencia</button>
+    </div>
+    <div class="filter-pills" id="corr-filtro-direccion">
+      <button data-direccion="" class="active">Todas</button>
+      <button data-direccion="enviada">Enviadas</button>
+      <button data-direccion="recibida">Recibidas</button>
     </div>
     <div class="correspondencia-filtros">
       <select id="corr-filtro-cliente" onchange="aplicarFiltrosCorrespondencia()">
@@ -4665,6 +4670,15 @@ async function renderCorrespondencia() {
     </div>
     <div id="correspondencia-lista">Cargando...</div>
   `;
+
+  document.getElementById('corr-filtro-direccion').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    document.querySelectorAll('#corr-filtro-direccion button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    correspondencia_filtros.direccion = btn.dataset.direccion;
+    pintarCorrespondencia();
+  });
 
   if (!contratos_cache.length) {
     const { data } = await sb.from('contratos').select('*, clientes(razon_social)');
@@ -4722,13 +4736,18 @@ function limpiarFiltrosCorrespondencia() {
   document.getElementById('corr-filtro-tipo-tercero').value = '';
   document.getElementById('corr-filtro-fecha-desde').value = '';
   document.getElementById('corr-filtro-fecha-hasta').value = '';
-  correspondencia_filtros = { contrato_id: '', proveedor_id: '', es_contratista: '', cliente_id: '', fecha_desde: '', fecha_hasta: '' };
+  document.querySelectorAll('#corr-filtro-direccion button').forEach(b => b.classList.remove('active'));
+  document.querySelector('#corr-filtro-direccion button[data-direccion=""]').classList.add('active');
+  correspondencia_filtros = { direccion: '', contrato_id: '', proveedor_id: '', es_contratista: '', cliente_id: '', fecha_desde: '', fecha_hasta: '' };
   pintarCorrespondencia();
 }
 
 function pintarCorrespondencia() {
   let lista = correspondencia_cache;
 
+  if (correspondencia_filtros.direccion) {
+    lista = lista.filter(c => c.direccion === correspondencia_filtros.direccion);
+  }
   if (correspondencia_filtros.contrato_id) {
     lista = lista.filter(c => c.contrato_id === correspondencia_filtros.contrato_id);
   }
@@ -4780,35 +4799,91 @@ function pintarCorrespondencia() {
         '<span class="meta">' + terceroLabel + '</span>' +
         '<span class="meta">' + (c.fecha || '') + '</span>' +
         estadoBadge +
+        (c.direccion === 'recibida' && c.estado_respuesta === 'pendiente'
+          ? '<a onclick="event.stopPropagation(); contestarCorrespondencia(\'' + c.id + '\')" style="color:var(--color-primary);cursor:pointer;font-size:13px;">Contestar</a>'
+          : '') +
       '</div>' +
     '</div>';
   }).join('');
 }
 
-async function abrirModalCorrespondencia(id) {
+function contestarCorrespondencia(id) {
+  const original = correspondencia_cache.find(c => c.id === id);
+  if (!original) return;
+
+  modal_correspondencia_id = null; // es una correspondencia nueva, no edición
+
+  const datosHeredados = {
+    cliente_id: original.cliente_id,
+    contrato_id: original.contrato_id,
+    proveedor_id: original.proveedor_id,
+    // El remitente de la recibida se convierte en el destinatario de la respuesta
+    destinatario_titulo: original.destinatario_titulo,
+    destinatario_nombre: original.destinatario_nombre,
+    destinatario_entidad: original.destinatario_entidad,
+    destinatario_email: original.destinatario_email,
+    referencia: original.referencia,
+    comunicacion_relacionada_id: original.id
+  };
+
+  pintarFormularioCorrespondencia(null, 'enviada', datosHeredados);
+}
+
+async function abrirModalCorrespondencia(id, datosRespuesta) {
   modal_correspondencia_id = id || null;
-
   let registro = id ? correspondencia_cache.find(c => c.id === id) : null;
-  const pendientes = correspondencia_cache.filter(c => c.estado_respuesta === 'pendiente' && c.id !== id);
 
-  // Solo está bloqueado (solo lectura) si el registro ya fue enviado
-  // por correo. Si existe pero no se ha enviado, sigue siendo editable.
+  // Si es un registro nuevo y no viene de "Contestar" (que ya trae la
+  // dirección implícita = enviada), primero preguntamos la dirección
+  // antes de mostrar el formulario completo.
+  if (!registro && !datosRespuesta) {
+    mostrarPasoSeleccionDireccion();
+    return;
+  }
+
+  const direccion = registro ? registro.direccion : 'enviada';
+  pintarFormularioCorrespondencia(registro, direccion, datosRespuesta);
+}
+
+function mostrarPasoSeleccionDireccion() {
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>Nueva correspondencia</h3>
+        <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:16px;">\u00bfEsta correspondencia fue enviada por HIDIVO o recibida de un tercero?</p>
+        <div class="modal-actions" style="flex-direction:column;gap:10px;">
+          <button class="btn" onclick="abrirModalCorrespondenciaConDireccion('enviada')">Enviada \u2014 HIDIVO genera el oficio</button>
+          <button class="btn btn-secondary" onclick="abrirModalCorrespondenciaConDireccion('recibida')">Recibida \u2014 registrar lo que nos llegó</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function abrirModalCorrespondenciaConDireccion(direccion) {
+  pintarFormularioCorrespondencia(null, direccion, null);
+}
+
+function pintarFormularioCorrespondencia(registro, direccion, datosRespuesta) {
+  const pendientes = correspondencia_cache.filter(c => c.estado_respuesta === 'pendiente' && c.id !== modal_correspondencia_id);
   const bloqueado = !!(registro && registro.enviado_por_correo);
   const esNuevo = !registro;
+  const esEnviada = direccion === 'enviada';
+
+  const tituloPersona = esEnviada ? 'Destinatario' : 'Remitente';
+  const placeholderRespuesta = datosRespuesta || {};
 
   document.getElementById('modal-container').innerHTML = `
     <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
       <div class="modal-card oficio-wide">
-        <h3>${registro ? registro.numero_completo : 'Nueva correspondencia'}</h3>
+        <h3>${registro ? registro.numero_completo : (esEnviada ? 'Nueva correspondencia enviada' : 'Nueva correspondencia recibida')}</h3>
+
+        <input type="hidden" id="corr-direccion" value="${direccion}">
 
         <div class="field-row">
           <div>
             <label>Direcci\u00f3n</label>
-            <select id="corr-direccion" ${bloqueado ? 'disabled' : ''}>
-              <option value="enviada" ${registro?.direccion === 'enviada' || !registro ? 'selected' : ''}>Enviada (HIDIVO genera el oficio)</option>
-
-              <option value="recibida" ${registro?.direccion === 'recibida' ? 'selected' : ''}>Recibida (acuse de recibo)</option>
-            </select>
+            <input type="text" value="${esEnviada ? 'Enviada' : 'Recibida'}" disabled>
           </div>
           <div>
             <label>Tipo</label>
@@ -4827,14 +4902,14 @@ async function abrirModalCorrespondencia(id) {
             <label>Cliente relacionado (opcional)</label>
             <select id="corr-cliente" ${bloqueado ? 'disabled' : ''}>
               <option value="">Sin cliente</option>
-              ${clientes_cache.map(c => '<option value="' + c.id + '" ' + (registro?.cliente_id === c.id ? 'selected' : '') + '>' + escapeHtml(c.razon_social) + '</option>').join('')}
+              ${clientes_cache.map(c => '<option value="' + c.id + '" ' + ((registro?.cliente_id || placeholderRespuesta.cliente_id) === c.id ? 'selected' : '') + '>' + escapeHtml(c.razon_social) + '</option>').join('')}
             </select>
           </div>
           <div>
             <label>Contrato relacionado (opcional)</label>
             <select id="corr-contrato" ${bloqueado ? 'disabled' : ''} onchange="onCambioContratoCorrespondencia()">
               <option value="">Sin contrato</option>
-              ${contratos_cache.map(c => '<option value="' + c.id + '" ' + (registro?.contrato_id === c.id ? 'selected' : '') + '>N.\u00b0 ' + escapeHtml(c.numero) + ' \u2014 ' + escapeHtml(c.clientes?.razon_social) + '</option>').join('')}
+              ${contratos_cache.map(c => '<option value="' + c.id + '" ' + ((registro?.contrato_id || placeholderRespuesta.contrato_id) === c.id ? 'selected' : '') + '>N.\u00b0 ' + escapeHtml(c.numero) + ' \u2014 ' + escapeHtml(c.clientes?.razon_social) + '</option>').join('')}
             </select>
           </div>
         </div>
@@ -4844,39 +4919,41 @@ async function abrirModalCorrespondencia(id) {
             <label>Proveedor / Contratista relacionado (opcional)</label>
             <select id="corr-proveedor" ${bloqueado ? 'disabled' : ''}>
               <option value="">Sin proveedor</option>
-              ${proveedores_cache.map(p => '<option value="' + p.id + '" ' + (registro?.proveedor_id === p.id ? 'selected' : '') + '>' + escapeHtml(p.razon_social) + (p.es_contratista ? ' (Contratista)' : '') + '</option>').join('')}
+              ${proveedores_cache.map(p => '<option value="' + p.id + '" ' + ((registro?.proveedor_id || placeholderRespuesta.proveedor_id) === p.id ? 'selected' : '') + '>' + escapeHtml(p.razon_social) + (p.es_contratista ? ' (Contratista)' : '') + '</option>').join('')}
             </select>
           </div>
           <div></div>
         </div>
 
-        <label>Destinatario</label>
+        <label>${tituloPersona}</label>
         <div class="field-row">
-          <div><input type="text" id="corr-dest-titulo" value="${escapeHtml(registro?.destinatario_titulo)}" placeholder="T\u00edtulo (ej. Ingeniero)" ${bloqueado ? 'disabled' : ''}></div>
-          <div><input type="text" id="corr-dest-nombre" value="${escapeHtml(registro?.destinatario_nombre)}" placeholder="Nombre completo" ${bloqueado ? 'disabled' : ''}></div>
+          <div><input type="text" id="corr-dest-titulo" value="${escapeHtml(registro?.destinatario_titulo || placeholderRespuesta.destinatario_titulo)}" placeholder="T\u00edtulo (ej. Ingeniero)" ${bloqueado ? 'disabled' : ''}></div>
+          <div><input type="text" id="corr-dest-nombre" value="${escapeHtml(registro?.destinatario_nombre || placeholderRespuesta.destinatario_nombre)}" placeholder="Nombre completo" ${bloqueado ? 'disabled' : ''}></div>
         </div>
         <div class="field-row">
-          <div><input type="text" id="corr-dest-entidad" value="${escapeHtml(registro?.destinatario_entidad)}" placeholder="Entidad / cargo" ${bloqueado ? 'disabled' : ''}></div>
-          <div><input type="text" id="corr-dest-ciudad" value="${escapeHtml(registro?.destinatario_ciudad) || 'Ciudad'}" placeholder="Ciudad" ${bloqueado ? 'disabled' : ''}></div>
+          <div><input type="text" id="corr-dest-entidad" value="${escapeHtml(registro?.destinatario_entidad || placeholderRespuesta.destinatario_entidad)}" placeholder="Entidad / cargo" ${bloqueado ? 'disabled' : ''}></div>
+          <div><input type="text" id="corr-dest-ciudad" value="${escapeHtml(registro?.destinatario_ciudad) || (esEnviada ? 'Ciudad' : '')}" placeholder="Ciudad" ${bloqueado ? 'disabled' : ''} ${esEnviada ? '' : 'class="hidden"'}></div>
         </div>
-        <input type="email" id="corr-dest-email" value="${escapeHtml(registro?.destinatario_email)}" placeholder="Correo del destinatario (para env\u00edo)" ${bloqueado ? 'disabled' : ''} style="margin-top:10px;">
+        <input type="email" id="corr-dest-email" value="${escapeHtml(registro?.destinatario_email || placeholderRespuesta.destinatario_email)}" placeholder="Correo de contacto ${esEnviada ? '(para envío)' : '(opcional)'}" ${bloqueado ? 'disabled' : ''} style="margin-top:10px;">
 
         <label style="margin-top:16px;">Referencia (Ref.:)</label>
-        <input type="text" id="corr-referencia" value="${escapeHtml(registro?.referencia)}" placeholder="ej. Contrato Tablero de control - Orden de Trabajo 006-2026" ${bloqueado ? 'disabled' : ''}>
+        <input type="text" id="corr-referencia" value="${escapeHtml(registro?.referencia || placeholderRespuesta.referencia)}" placeholder="ej. Contrato Tablero de control - Orden de Trabajo 006-2026" ${bloqueado ? 'disabled' : ''}>
 
-        <label>Cuerpo del oficio</label>
-        <textarea id="corr-cuerpo" placeholder="P\u00e1rrafos separados por l\u00ednea en blanco" style="min-height:120px;" ${bloqueado ? 'disabled' : ''}>${escapeHtml(registro?.cuerpo)}</textarea>
+        <label>${esEnviada ? 'Cuerpo del oficio' : 'Resumen del contenido recibido'}</label>
+        <textarea id="corr-cuerpo" placeholder="${esEnviada ? 'Párrafos separados por línea en blanco' : 'Describe brevemente qué dice el documento recibido'}" style="min-height:120px;" ${bloqueado ? 'disabled' : ''}>${escapeHtml(registro?.cuerpo)}</textarea>
 
-        <div class="field-row">
-          <div>
-            <label>Firma \u2014 nombre</label>
-            <input type="text" id="corr-firma-nombre" value="${escapeHtml(registro?.firmante_nombre) || 'Nicol\u00e1s F. Parducci'}" ${bloqueado ? 'disabled' : ''}>
+        ${esEnviada ? `
+          <div class="field-row">
+            <div>
+              <label>Firma \u2014 nombre</label>
+              <input type="text" id="corr-firma-nombre" value="${escapeHtml(registro?.firmante_nombre) || 'Nicol\u00e1s F. Parducci'}" ${bloqueado ? 'disabled' : ''}>
+            </div>
+            <div>
+              <label>Firma \u2014 cargo</label>
+              <input type="text" id="corr-firma-cargo" value="${escapeHtml(registro?.firmante_cargo) || 'DIRECTOR PROYECTO'}" ${bloqueado ? 'disabled' : ''}>
+            </div>
           </div>
-          <div>
-            <label>Firma \u2014 cargo</label>
-            <input type="text" id="corr-firma-cargo" value="${escapeHtml(registro?.firmante_cargo) || 'DIRECTOR PROYECTO'}" ${bloqueado ? 'disabled' : ''}>
-          </div>
-        </div>
+        ` : ''}
 
         <div class="checkbox-row">
           <input type="checkbox" id="corr-requiere-respuesta" ${registro?.requiere_respuesta ? 'checked' : ''} ${bloqueado ? 'disabled' : ''}>
@@ -4887,20 +4964,20 @@ async function abrirModalCorrespondencia(id) {
           <label style="margin-top:12px;">\u00bfEs respuesta a alguna correspondencia pendiente?</label>
           <select id="corr-relacionada" ${bloqueado ? 'disabled' : ''}>
             <option value="">No es respuesta a ninguna</option>
-            ${pendientes.map(p => '<option value="' + p.id + '">' + escapeHtml(p.numero_completo) + ' \u2014 ' + (escapeHtml(p.referencia) || '') + '</option>').join('')}
+            ${pendientes.map(p => '<option value="' + p.id + '" ' + (placeholderRespuesta.comunicacion_relacionada_id === p.id ? 'selected' : '') + '>' + escapeHtml(p.numero_completo) + ' \u2014 ' + (escapeHtml(p.referencia) || '') + '</option>').join('')}
           </select>
         ` : ''}
 
-        <div id="corr-pdf-preview-wrap"></div>
+        ${esEnviada ? '<div id="corr-pdf-preview-wrap"></div>' : ''}
 
-        ${registro ? '<div id="correspondencia-adjuntos-container"></div>' : ''}
+        ${registro ? '<div id="correspondencia-adjuntos-container"></div>' : '<p style="font-size:12px;color:var(--color-text-muted);margin-top:16px;">Guarda primero para poder adjuntar el documento recibido como archivo.</p>'}
 
         <div id="corr-msg"></div>
         <div class="modal-actions">
           <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
           ${!bloqueado ? `
-            <button class="btn btn-secondary" onclick="previsualizarOficioCorrespondencia()">Vista previa PDF</button>
-            ${!esNuevo ? `<button class="btn btn-secondary" style="color:var(--color-danger);" onclick="borrarCorrespondencia('${id}')">Eliminar</button>` : ''}
+            ${esEnviada ? '<button class="btn btn-secondary" onclick="previsualizarOficioCorrespondencia()">Vista previa PDF</button>' : ''}
+            ${!esNuevo ? `<button class="btn btn-secondary" style="color:var(--color-danger);" onclick="borrarCorrespondencia('${registro.id}')">Eliminar</button>` : ''}
             <button class="btn" onclick="guardarCorrespondencia()">${esNuevo ? 'Guardar' : 'Guardar cambios'}</button>
           ` : ''}
         </div>
@@ -4916,6 +4993,7 @@ async function abrirModalCorrespondencia(id) {
 
 function pintarAccionesPdfCorrespondencia(registro) {
   const wrap = document.getElementById('corr-pdf-preview-wrap');
+  if (!wrap) return; // las recibidas no tienen este bloque
   wrap.innerHTML = `
     <div class="adjuntos-wrap">
       <label>Documentos</label>
@@ -5054,12 +5132,12 @@ function leerDatosFormularioCorrespondencia() {
     destinatario_titulo: document.getElementById('corr-dest-titulo').value.trim(),
     destinatario_nombre: document.getElementById('corr-dest-nombre').value.trim(),
     destinatario_entidad: document.getElementById('corr-dest-entidad').value.trim(),
-    destinatario_ciudad: document.getElementById('corr-dest-ciudad').value.trim() || 'Ciudad',
+    destinatario_ciudad: document.getElementById('corr-dest-ciudad')?.value.trim() || 'Ciudad',
     destinatario_email: document.getElementById('corr-dest-email').value.trim(),
     referencia: document.getElementById('corr-referencia').value.trim(),
     cuerpo: document.getElementById('corr-cuerpo').value.trim(),
-    firmante_nombre: document.getElementById('corr-firma-nombre').value.trim(),
-    firmante_cargo: document.getElementById('corr-firma-cargo').value.trim(),
+    firmante_nombre: document.getElementById('corr-firma-nombre')?.value.trim() || '',
+    firmante_cargo: document.getElementById('corr-firma-cargo')?.value.trim() || '',
     requiere_respuesta: document.getElementById('corr-requiere-respuesta').checked,
     comunicacion_relacionada_id: document.getElementById('corr-relacionada')?.value || null,
     fecha_larga: fechaLarga,
@@ -5099,13 +5177,14 @@ async function guardarCorrespondencia() {
     numeroCompleto = registroExistente.numero_completo;
   } else {
     anio = new Date().getFullYear();
-    const { data: numeroData, error: numeroError } = await sb.rpc('fn_siguiente_numero_correspondencia', { p_anio: anio });
+    const { data: numeroData, error: numeroError } = await sb.rpc('fn_siguiente_numero_correspondencia', { p_anio: anio, p_direccion: datos.direccion });
     if (numeroError) {
       showMsg('corr-msg', 'Error obteniendo el correlativo: ' + numeroError.message, 'error');
       return;
     }
     numero = numeroData;
-    numeroCompleto = 'HDV.' + String(numero).padStart(3, '0') + '.' + anio;
+    const prefijo = datos.direccion === 'enviada' ? 'HDV' : 'REC';
+    numeroCompleto = prefijo + '.' + String(numero).padStart(3, '0') + '.' + anio;
   }
 
   const { data: { user } } = await sb.auth.getUser();
@@ -5373,13 +5452,13 @@ async function cargarResumenDashboard() {
       <div class="detalle">${correspondenciaSinEnviar ? 'Oficio(s)/correo(s) en borrador' : 'Todo lo creado ya se envi\u00f3'}</div>
     </div>
 
-    <div class="dashboard-card ${recibidasPendientes ? 'alerta' : 'ok'}" onclick="irADashboardModulo('correspondencia')">
+    <div class="dashboard-card ${recibidasPendientes ? 'alerta' : 'ok'}" onclick="irADashboardModulo('correspondencia', 'recibida')">
       <div class="titulo">Recibida sin contestar</div>
       <div class="valor">${recibidasPendientes}</div>
       <div class="detalle">${recibidasPendientes ? 'Correspondencia recibida que debemos responder' : 'Todo lo recibido est\u00e1 contestado'}</div>
     </div>
 
-    <div class="dashboard-card ${enviadasPendientes ? 'alerta' : 'ok'}" onclick="irADashboardModulo('correspondencia')">
+    <div class="dashboard-card ${enviadasPendientes ? 'alerta' : 'ok'}" onclick="irADashboardModulo('correspondencia', 'enviada')">
       <div class="titulo">Enviada sin respuesta</div>
       <div class="valor">${enviadasPendientes}</div>
       <div class="detalle">${enviadasPendientes ? 'Esperando respuesta de la contraparte' : 'Todo lo enviado ya fue respondido'}</div>
@@ -5393,12 +5472,20 @@ async function cargarResumenDashboard() {
   `;
 }
 
-function irADashboardModulo(modulo) {
+function irADashboardModulo(modulo, direccionFiltro) {
   document.querySelectorAll('#main-nav a').forEach(a => a.classList.remove('active'));
   const link = document.querySelector('#main-nav a[data-module="' + modulo + '"]');
   if (link) link.classList.add('active');
   renderModule(modulo);
   cerrarSidebarMobile();
+
+  if (modulo === 'correspondencia' && direccionFiltro) {
+    // Espera a que el módulo termine de pintar el filtro antes de aplicarlo
+    setTimeout(() => {
+      const btn = document.querySelector('#corr-filtro-direccion button[data-direccion="' + direccionFiltro + '"]');
+      if (btn) btn.click();
+    }, 50);
+  }
 }
 
 init();
