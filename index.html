@@ -975,8 +975,20 @@
     <div class="subtitle">Gestión de empresas — HIDIVO</div>
     <label for="login-email">Correo electrónico</label>
     <input type="email" id="login-email" placeholder="tu@correo.com">
+
+    <div id="login-password-wrap" class="hidden">
+      <label for="login-password">Contraseña</label>
+      <input type="password" id="login-password" placeholder="Tu contraseña">
+    </div>
+
     <button id="btn-send-magic-link">Enviar enlace de acceso</button>
+    <button id="btn-login-password" class="hidden">Iniciar sesión</button>
+
     <div id="login-msg"></div>
+
+    <p style="text-align:center;margin-top:16px;font-size:13px;">
+      <a id="link-toggle-login-mode" style="color:var(--color-primary);cursor:pointer;">Prefiero iniciar sesión con contraseña</a>
+    </p>
   </div>
 </div>
 
@@ -1095,6 +1107,50 @@ document.getElementById('btn-send-magic-link').addEventListener('click', async (
   } else {
     showMsg('login-msg', 'Te enviamos un enlace de acceso a tu correo. Revisa tu bandeja de entrada.', 'success');
   }
+});
+
+// =====================================================================
+// TOGGLE: alternar entre login por magic link y login con contraseña
+// (útil en iOS, donde la PWA instalada no comparte sesión con Safari,
+// así que el flujo de "abrir el correo" no funciona dentro del ícono)
+// =====================================================================
+let modoLoginConContrasena = false;
+
+document.getElementById('link-toggle-login-mode').addEventListener('click', () => {
+  modoLoginConContrasena = !modoLoginConContrasena;
+  clearMsg('login-msg');
+
+  document.getElementById('login-password-wrap').classList.toggle('hidden', !modoLoginConContrasena);
+  document.getElementById('btn-send-magic-link').classList.toggle('hidden', modoLoginConContrasena);
+  document.getElementById('btn-login-password').classList.toggle('hidden', !modoLoginConContrasena);
+  document.getElementById('link-toggle-login-mode').textContent = modoLoginConContrasena
+    ? 'Prefiero recibir un enlace por correo'
+    : 'Prefiero iniciar sesión con contraseña';
+});
+
+document.getElementById('btn-login-password').addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  clearMsg('login-msg');
+
+  if (!email || !password) {
+    showMsg('login-msg', 'Ingresa tu correo y contraseña.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-login-password');
+  btn.disabled = true;
+  btn.textContent = 'Ingresando...';
+
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+
+  btn.disabled = false;
+  btn.textContent = 'Iniciar sesión';
+
+  if (error) {
+    showMsg('login-msg', 'Error: ' + (error.message || 'No se pudo iniciar sesión.'), 'error');
+  }
+  // Si fue exitoso, onAuthStateChange (SIGNED_IN) se encarga de continuar.
 });
 
 // =====================================================================
