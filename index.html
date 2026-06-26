@@ -4396,10 +4396,10 @@ async function abrirModalCorrespondencia(id) {
             <label>Tipo</label>
             <select id="corr-tipo" ${registro ? 'disabled' : ''}>
               <option value="oficio" ${(!registro || registro?.tipo === 'oficio') ? 'selected' : ''}>Oficio</option>
-              <option value="correo">Correo</option>
-              <option value="memorando">Memorando</option>
-              <option value="acta">Acta</option>
-              <option value="otro">Otro</option>
+              <option value="correo" ${registro?.tipo === 'correo' ? 'selected' : ''}>Correo</option>
+              <option value="memorando" ${registro?.tipo === 'memorando' ? 'selected' : ''}>Memorando</option>
+              <option value="acta" ${registro?.tipo === 'acta' ? 'selected' : ''}>Acta</option>
+              <option value="otro" ${registro?.tipo === 'otro' ? 'selected' : ''}>Otro</option>
             </select>
           </div>
         </div>
