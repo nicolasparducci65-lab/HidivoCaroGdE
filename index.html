@@ -4264,7 +4264,7 @@ const LOGO_HIDIVO_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAkwAAA
 const TIPO_CORRESPONDENCIA_LABELS = { oficio: 'Oficio', correo: 'Correo', memorando: 'Memorando', acta: 'Acta', otro: 'Otro' };
 
 let correspondencia_cache = [];
-let correspondencia_filtros = { contrato_id: '', proveedor_id: '', es_contratista: '' };
+let correspondencia_filtros = { contrato_id: '', proveedor_id: '', es_contratista: '', cliente_id: '', fecha_desde: '', fecha_hasta: '' };
 let modal_correspondencia_id = null;
 
 async function renderCorrespondencia() {
@@ -4275,6 +4275,9 @@ async function renderCorrespondencia() {
       <button class="btn" onclick="abrirModalCorrespondencia()">+ Nueva correspondencia</button>
     </div>
     <div class="correspondencia-filtros">
+      <select id="corr-filtro-cliente" onchange="aplicarFiltrosCorrespondencia()">
+        <option value="">Todos los clientes</option>
+      </select>
       <select id="corr-filtro-contrato" onchange="aplicarFiltrosCorrespondencia()">
         <option value="">Todos los contratos</option>
       </select>
@@ -4286,6 +4289,9 @@ async function renderCorrespondencia() {
         <option value="contratista">Solo contratistas</option>
         <option value="proveedor">Solo proveedores (no contratistas)</option>
       </select>
+      <input type="date" id="corr-filtro-fecha-desde" onchange="aplicarFiltrosCorrespondencia()" title="Desde">
+      <input type="date" id="corr-filtro-fecha-hasta" onchange="aplicarFiltrosCorrespondencia()" title="Hasta">
+      <button class="btn btn-secondary" onclick="limpiarFiltrosCorrespondencia()">Limpiar filtros</button>
     </div>
     <div id="correspondencia-lista">Cargando...</div>
   `;
@@ -4298,6 +4304,13 @@ async function renderCorrespondencia() {
     const { data } = await sb.from('proveedores').select('*');
     proveedores_cache = data || [];
   }
+  if (!clientes_cache.length) {
+    const { data } = await sb.from('clientes').select('*');
+    clientes_cache = data || [];
+  }
+
+  document.getElementById('corr-filtro-cliente').innerHTML += clientes_cache
+    .map(c => '<option value="' + c.id + '">' + escapeHtml(c.razon_social) + '</option>').join('');
 
   document.getElementById('corr-filtro-contrato').innerHTML += contratos_cache
     .map(c => '<option value="' + c.id + '">N.\u00b0 ' + escapeHtml(c.numero) + ' \u2014 ' + escapeHtml(c.clientes?.razon_social) + '</option>').join('');
@@ -4310,7 +4323,7 @@ async function renderCorrespondencia() {
 async function cargarCorrespondencia() {
   const { data, error } = await sb
     .from('correspondencia')
-    .select('*, contratos(numero), proveedores(razon_social, es_contratista)')
+    .select('*, contratos(numero), proveedores(razon_social, es_contratista), clientes(razon_social)')
     .order('numero', { ascending: false });
 
   if (error) {
@@ -4326,6 +4339,20 @@ function aplicarFiltrosCorrespondencia() {
   correspondencia_filtros.contrato_id = document.getElementById('corr-filtro-contrato').value;
   correspondencia_filtros.proveedor_id = document.getElementById('corr-filtro-proveedor').value;
   correspondencia_filtros.es_contratista = document.getElementById('corr-filtro-tipo-tercero').value;
+  correspondencia_filtros.cliente_id = document.getElementById('corr-filtro-cliente').value;
+  correspondencia_filtros.fecha_desde = document.getElementById('corr-filtro-fecha-desde').value;
+  correspondencia_filtros.fecha_hasta = document.getElementById('corr-filtro-fecha-hasta').value;
+  pintarCorrespondencia();
+}
+
+function limpiarFiltrosCorrespondencia() {
+  document.getElementById('corr-filtro-cliente').value = '';
+  document.getElementById('corr-filtro-contrato').value = '';
+  document.getElementById('corr-filtro-proveedor').value = '';
+  document.getElementById('corr-filtro-tipo-tercero').value = '';
+  document.getElementById('corr-filtro-fecha-desde').value = '';
+  document.getElementById('corr-filtro-fecha-hasta').value = '';
+  correspondencia_filtros = { contrato_id: '', proveedor_id: '', es_contratista: '', cliente_id: '', fecha_desde: '', fecha_hasta: '' };
   pintarCorrespondencia();
 }
 
@@ -4343,6 +4370,15 @@ function pintarCorrespondencia() {
   } else if (correspondencia_filtros.es_contratista === 'proveedor') {
     lista = lista.filter(c => c.proveedor_id && !c.proveedores?.es_contratista);
   }
+  if (correspondencia_filtros.cliente_id) {
+    lista = lista.filter(c => c.cliente_id === correspondencia_filtros.cliente_id);
+  }
+  if (correspondencia_filtros.fecha_desde) {
+    lista = lista.filter(c => c.fecha && c.fecha >= correspondencia_filtros.fecha_desde);
+  }
+  if (correspondencia_filtros.fecha_hasta) {
+    lista = lista.filter(c => c.fecha && c.fecha <= correspondencia_filtros.fecha_hasta);
+  }
 
   const cont = document.getElementById('correspondencia-lista');
   if (!lista.length) {
@@ -4358,7 +4394,9 @@ function pintarCorrespondencia() {
         : '';
     const terceroLabel = c.contratos
       ? 'Contrato N.\u00b0 ' + escapeHtml(c.contratos.numero)
-      : (c.proveedores ? escapeHtml(c.proveedores.razon_social) + (c.proveedores.es_contratista ? ' (Contratista)' : '') : 'Sin v\u00ednculo');
+      : (c.proveedores
+          ? escapeHtml(c.proveedores.razon_social) + (c.proveedores.es_contratista ? ' (Contratista)' : '')
+          : (c.clientes ? escapeHtml(c.clientes.razon_social) : 'Sin v\u00ednculo'));
 
     return '<div class="correspondencia-row" onclick="abrirModalCorrespondencia(\'' + c.id + '\')">' +
       '<div class="izq">' +
@@ -4416,12 +4454,22 @@ async function abrirModalCorrespondencia(id) {
 
         <div class="field-row">
           <div>
+            <label>Cliente relacionado (opcional)</label>
+            <select id="corr-cliente" ${bloqueado ? 'disabled' : ''}>
+              <option value="">Sin cliente</option>
+              ${clientes_cache.map(c => '<option value="' + c.id + '" ' + (registro?.cliente_id === c.id ? 'selected' : '') + '>' + escapeHtml(c.razon_social) + '</option>').join('')}
+            </select>
+          </div>
+          <div>
             <label>Contrato relacionado (opcional)</label>
-            <select id="corr-contrato" ${bloqueado ? 'disabled' : ''}>
+            <select id="corr-contrato" ${bloqueado ? 'disabled' : ''} onchange="onCambioContratoCorrespondencia()">
               <option value="">Sin contrato</option>
               ${contratos_cache.map(c => '<option value="' + c.id + '" ' + (registro?.contrato_id === c.id ? 'selected' : '') + '>N.\u00b0 ' + escapeHtml(c.numero) + ' \u2014 ' + escapeHtml(c.clientes?.razon_social) + '</option>').join('')}
             </select>
           </div>
+        </div>
+
+        <div class="field-row">
           <div>
             <label>Proveedor / Contratista relacionado (opcional)</label>
             <select id="corr-proveedor" ${bloqueado ? 'disabled' : ''}>
@@ -4429,6 +4477,7 @@ async function abrirModalCorrespondencia(id) {
               ${proveedores_cache.map(p => '<option value="' + p.id + '" ' + (registro?.proveedor_id === p.id ? 'selected' : '') + '>' + escapeHtml(p.razon_social) + (p.es_contratista ? ' (Contratista)' : '') + '</option>').join('')}
             </select>
           </div>
+          <div></div>
         </div>
 
         <label>Destinatario</label>
@@ -4611,6 +4660,15 @@ function generarPdfOficio(datos) {
   return doc;
 }
 
+function onCambioContratoCorrespondencia() {
+  const contratoId = document.getElementById('corr-contrato').value;
+  if (!contratoId) return;
+  const contrato = contratos_cache.find(c => c.id === contratoId);
+  if (contrato && contrato.cliente_id) {
+    document.getElementById('corr-cliente').value = contrato.cliente_id;
+  }
+}
+
 function leerDatosFormularioCorrespondencia() {
   const hoy = new Date();
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -4622,6 +4680,7 @@ function leerDatosFormularioCorrespondencia() {
     tipo: document.getElementById('corr-tipo').value,
     contrato_id: document.getElementById('corr-contrato').value || null,
     proveedor_id: document.getElementById('corr-proveedor').value || null,
+    cliente_id: document.getElementById('corr-cliente').value || null,
     destinatario_titulo: document.getElementById('corr-dest-titulo').value.trim(),
     destinatario_nombre: document.getElementById('corr-dest-nombre').value.trim(),
     destinatario_entidad: document.getElementById('corr-dest-entidad').value.trim(),
@@ -4712,6 +4771,7 @@ async function guardarCorrespondencia() {
     tipo: datos.tipo,
     contrato_id: datos.contrato_id,
     proveedor_id: datos.proveedor_id,
+    cliente_id: datos.cliente_id,
     destinatario_titulo: datos.destinatario_titulo || null,
     destinatario_nombre: datos.destinatario_nombre || null,
     destinatario_entidad: datos.destinatario_entidad || null,
