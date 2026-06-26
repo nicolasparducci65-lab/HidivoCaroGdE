@@ -2140,7 +2140,6 @@ const FORMA_PAGO_LABELS = { anticipo_saldo: 'Anticipo + saldo', cuotas: 'Cuotas'
 
 let contratos_cache = [];
 let contratos_filtros = { cliente_id: '', estado: '', fecha_desde: '', fecha_hasta: '' };
-let comunicaciones_pendientes_por_contrato = {};
 let modal_contrato_id = null;
 let modal_contrato_tab = 'datos';
 let modal_comunicaciones = [];
@@ -2208,16 +2207,6 @@ async function renderContratos() {
   }
   contratos_cache = data;
 
-  // Comunicaciones pendientes por contrato, para el indicador del resumen
-  const { data: comsPendientes } = await sb
-    .from('contrato_comunicaciones')
-    .select('contrato_id')
-    .eq('estado_respuesta', 'pendiente');
-  comunicaciones_pendientes_por_contrato = {};
-  (comsPendientes || []).forEach(c => {
-    comunicaciones_pendientes_por_contrato[c.contrato_id] = (comunicaciones_pendientes_por_contrato[c.contrato_id] || 0) + 1;
-  });
-
   pintarContratos();
 }
 
@@ -2256,7 +2245,6 @@ function pintarResumenContratos(lista) {
   const vigentes = lista.filter(c => c.estado === 'vigente').length;
   const cerradosOAnulados = lista.filter(c => c.estado === 'cerrado' || c.estado === 'anulado').length;
   const promedio = lista.length ? totalMonto / lista.length : 0;
-  const totalComunicacionesPendientes = lista.reduce((acc, c) => acc + (comunicaciones_pendientes_por_contrato[c.id] || 0), 0);
 
   const facturacionMensualProyectada = lista
     .filter(c => c.estado === 'vigente')
@@ -2291,10 +2279,6 @@ function pintarResumenContratos(lista) {
       <div class="label">Facturación mensual proyectada</div>
       <div class="valor">$${formatearMoneda(facturacionMensualProyectada)}</div>
       <div class="detalle">Suma de (monto \u00f7 meses) de contratos vigentes</div>
-    </div>
-    <div class="resumen-card">
-      <div class="label">Comunicaciones pendientes</div>
-      <div class="valor">${totalComunicacionesPendientes}</div>
     </div>
   `;
 }
@@ -5338,10 +5322,10 @@ async function cargarResumenDashboard() {
   const hoy = new Date().toISOString().slice(0, 10);
   const en7dias = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const [carteraRes, correspondenciaRes, comunicacionesRes, cuentasRes] = await Promise.all([
+  const [carteraRes, correspondenciaRes, correspondenciaPendienteRes, cuentasRes] = await Promise.all([
     sb.from('cartera_documentos').select('tipo, saldo_pendiente, fecha_vencimiento, estado').neq('estado', 'pagado'),
     sb.from('correspondencia').select('id').eq('direccion', 'enviada').eq('enviado_por_correo', false),
-    sb.from('contrato_comunicaciones').select('id').eq('estado_respuesta', 'pendiente'),
+    sb.from('correspondencia').select('direccion').eq('estado_respuesta', 'pendiente'),
     sb.from('cuentas_bancarias').select('saldo_actual')
   ]);
 
@@ -5352,7 +5336,9 @@ async function cargarResumenDashboard() {
   const totalPendienteCxP = cartera.filter(d => d.tipo === 'por_pagar').reduce((acc, d) => acc + Number(d.saldo_pendiente || 0), 0);
 
   const correspondenciaSinEnviar = (correspondenciaRes.data || []).length;
-  const comunicacionesPendientes = (comunicacionesRes.data || []).length;
+  const pendientesPorDireccion = correspondenciaPendienteRes.data || [];
+  const recibidasPendientes = pendientesPorDireccion.filter(c => c.direccion === 'recibida').length;
+  const enviadasPendientes = pendientesPorDireccion.filter(c => c.direccion === 'enviada').length;
   const saldoTotalCuentas = (cuentasRes.data || []).reduce((acc, c) => acc + Number(c.saldo_actual || 0), 0);
 
   const grid = document.getElementById('dashboard-grid');
@@ -5387,10 +5373,16 @@ async function cargarResumenDashboard() {
       <div class="detalle">${correspondenciaSinEnviar ? 'Oficio(s)/correo(s) en borrador' : 'Todo lo creado ya se envi\u00f3'}</div>
     </div>
 
-    <div class="dashboard-card ${comunicacionesPendientes ? 'alerta' : 'ok'}" onclick="irADashboardModulo('contratos')">
-      <div class="titulo">Comunicaciones pendientes</div>
-      <div class="valor">${comunicacionesPendientes}</div>
-      <div class="detalle">Esperando respuesta en alg\u00fan contrato</div>
+    <div class="dashboard-card ${recibidasPendientes ? 'alerta' : 'ok'}" onclick="irADashboardModulo('correspondencia')">
+      <div class="titulo">Recibida sin contestar</div>
+      <div class="valor">${recibidasPendientes}</div>
+      <div class="detalle">${recibidasPendientes ? 'Correspondencia recibida que debemos responder' : 'Todo lo recibido est\u00e1 contestado'}</div>
+    </div>
+
+    <div class="dashboard-card ${enviadasPendientes ? 'alerta' : 'ok'}" onclick="irADashboardModulo('correspondencia')">
+      <div class="titulo">Enviada sin respuesta</div>
+      <div class="valor">${enviadasPendientes}</div>
+      <div class="detalle">${enviadasPendientes ? 'Esperando respuesta de la contraparte' : 'Todo lo enviado ya fue respondido'}</div>
     </div>
 
     <div class="dashboard-card neutro" onclick="irADashboardModulo('tesoreria')">
