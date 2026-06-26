@@ -1081,7 +1081,7 @@ document.getElementById('btn-send-magic-link').addEventListener('click', async (
   const { error } = await sb.auth.signInWithOtp({
     email: email,
     options: {
-      emailRedirectTo: window.location.origin + window.location.pathname
+      emailRedirectTo: window.location.origin + '/HidivoCaroGdE/'
     }
   });
 
@@ -4251,7 +4251,7 @@ async function enviarInvitacion() {
       },
       body: JSON.stringify({
         email: email,
-        redirectTo: window.location.origin + window.location.pathname
+        redirectTo: window.location.origin + '/HidivoCaroGdE/'
       })
     });
 
