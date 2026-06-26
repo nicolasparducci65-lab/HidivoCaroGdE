@@ -2235,12 +2235,31 @@ function limpiarFiltrosContratos() {
   pintarContratos();
 }
 
+// Calcula la duración en meses entre dos fechas (YYYY-MM-DD), con un
+// mínimo de 1 mes — un contrato de cualquier duración corta sigue
+// representando al menos un mes de facturación.
+function mesesDeDuracion(fechaInicio, fechaFin) {
+  if (!fechaInicio || !fechaFin) return null;
+  const inicio = new Date(fechaInicio);
+  const fin = new Date(fechaFin);
+  const meses = (fin.getFullYear() - inicio.getFullYear()) * 12 + (fin.getMonth() - inicio.getMonth()) + 1;
+  return Math.max(meses, 1);
+}
+
 function pintarResumenContratos(lista) {
   const totalMonto = lista.reduce((acc, c) => acc + Number(c.monto_total || 0), 0);
   const vigentes = lista.filter(c => c.estado === 'vigente').length;
   const cerradosOAnulados = lista.filter(c => c.estado !== 'vigente').length;
   const promedio = lista.length ? totalMonto / lista.length : 0;
   const totalComunicacionesPendientes = lista.reduce((acc, c) => acc + (comunicaciones_pendientes_por_contrato[c.id] || 0), 0);
+
+  const facturacionMensualProyectada = lista
+    .filter(c => c.estado === 'vigente')
+    .reduce((acc, c) => {
+      const meses = mesesDeDuracion(c.fecha_inicio, c.fecha_fin);
+      if (!meses) return acc; // contrato vigente sin fechas completas (no debería ocurrir tras la validación)
+      return acc + (Number(c.monto_total || 0) / meses);
+    }, 0);
 
   document.getElementById('contratos-resumen').innerHTML = `
     <div class="resumen-card">
@@ -2258,6 +2277,11 @@ function pintarResumenContratos(lista) {
     <div class="resumen-card">
       <div class="label">Monto promedio</div>
       <div class="valor">$${formatearMoneda(promedio)}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Facturación mensual proyectada</div>
+      <div class="valor">$${formatearMoneda(facturacionMensualProyectada)}</div>
+      <div class="detalle">Suma de (monto \u00f7 meses) de contratos vigentes</div>
     </div>
     <div class="resumen-card">
       <div class="label">Comunicaciones pendientes</div>
@@ -2431,6 +2455,16 @@ async function guardarContrato() {
 
   if (!payload.cliente_id) {
     showMsg('contrato-msg', 'Selecciona un cliente.', 'error');
+    return;
+  }
+
+  if (payload.estado === 'vigente' && (!payload.fecha_inicio || !payload.fecha_fin)) {
+    showMsg('contrato-msg', 'Un contrato vigente debe tener fecha de inicio y fecha de fin.', 'error');
+    return;
+  }
+
+  if (payload.fecha_inicio && payload.fecha_fin && payload.fecha_fin < payload.fecha_inicio) {
+    showMsg('contrato-msg', 'La fecha de fin no puede ser anterior a la fecha de inicio.', 'error');
     return;
   }
 
