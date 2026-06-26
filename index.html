@@ -1288,6 +1288,13 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+// Formatea un número como moneda en notación latinoamericana:
+// puntos para miles/millones, coma para decimales (ej. $1.234.567,89)
+function formatearMoneda(valor) {
+  const numero = Number(valor) || 0;
+  return numero.toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // =====================================================================
 // MÓDULO: SERVICIOS
 // =====================================================================
@@ -1358,7 +1365,7 @@ function pintarServicios(lista) {
       <td>${escapeHtml(s.codigo)}</td>
       <td>${escapeHtml(s.nombre)}</td>
       <td>${escapeHtml(MODALIDAD_LABELS[s.modalidad_tarifa] || s.modalidad_tarifa || '—')}</td>
-      <td>${s.tarifa_referencial != null ? '$' + Number(s.tarifa_referencial).toFixed(2) : '—'}</td>
+      <td>${s.tarifa_referencial != null ? '$' + formatearMoneda(s.tarifa_referencial) : '—'}</td>
       <td><span class="badge ${s.activo ? 'activo' : 'inactivo'}">${s.activo ? 'Activo' : 'Inactivo'}</span></td>
       <td class="row-actions">
         <a onclick="abrirModalServicio('${s.id}')">Editar</a>
@@ -1838,7 +1845,7 @@ function pintarProformas() {
       <td>${p.numero ?? '—'}</td>
       <td>${escapeHtml(p.clientes?.razon_social) || '—'}</td>
       <td>${p.fecha_emision || '—'}</td>
-      <td>$${Number(p.total || 0).toFixed(2)}</td>
+      <td>$${formatearMoneda(p.total || 0)}</td>
       <td><span class="badge ${ESTADO_PROFORMA_BADGE[p.estado] || 'inactivo'}">${ESTADO_PROFORMA_LABELS[p.estado] || p.estado}</span></td>
       <td class="row-actions">
         <a onclick="abrirModalProforma('${p.id}')">${p.estado === 'aprobada' ? 'Ver' : 'Editar'}</a>
@@ -1981,8 +1988,8 @@ function pintarItemsProforma() {
         <tr>
           <td>${escapeHtml(item.descripcion)}</td>
           <td class="col-cantidad">${item.cantidad}</td>
-          <td class="col-precio">$${Number(item.precio_unitario).toFixed(2)}</td>
-          <td class="col-subtotal">$${subtotal.toFixed(2)}</td>
+          <td class="col-precio">$${formatearMoneda(item.precio_unitario)}</td>
+          <td class="col-subtotal">$${formatearMoneda(subtotal)}</td>
           <td></td>
         </tr>
       `;
@@ -2001,7 +2008,7 @@ function pintarItemsProforma() {
         <td class="col-precio">
           <input type="text" value="${item.precio_unitario}" onchange="actualizarItemProforma(${idx}, 'precio_unitario', this.value)">
         </td>
-        <td class="col-subtotal">$${subtotal.toFixed(2)}</td>
+        <td class="col-subtotal">$${formatearMoneda(subtotal)}</td>
         <td class="col-eliminar" onclick="eliminarItemProforma(${idx})">✕</td>
       </tr>
     `;
@@ -2016,9 +2023,9 @@ function calcularTotalesProforma() {
   const iva = subtotal * IVA_TASA;
   const total = subtotal + iva;
 
-  document.getElementById('prof-subtotal-display').textContent = '$' + subtotal.toFixed(2);
-  document.getElementById('prof-iva-display').textContent = '$' + iva.toFixed(2);
-  document.getElementById('prof-total-display').textContent = '$' + total.toFixed(2);
+  document.getElementById('prof-subtotal-display').textContent = '$' + formatearMoneda(subtotal);
+  document.getElementById('prof-iva-display').textContent = '$' + formatearMoneda(iva);
+  document.getElementById('prof-total-display').textContent = '$' + formatearMoneda(total);
 
   return { subtotal, iva, total };
 }
@@ -2238,7 +2245,7 @@ function pintarResumenContratos(lista) {
   document.getElementById('contratos-resumen').innerHTML = `
     <div class="resumen-card">
       <div class="label">Monto total (sin IVA)</div>
-      <div class="valor">$${totalMonto.toFixed(2)}</div>
+      <div class="valor">$${formatearMoneda(totalMonto)}</div>
     </div>
     <div class="resumen-card">
       <div class="label">Contratos vigentes</div>
@@ -2250,7 +2257,7 @@ function pintarResumenContratos(lista) {
     </div>
     <div class="resumen-card">
       <div class="label">Monto promedio</div>
-      <div class="valor">$${promedio.toFixed(2)}</div>
+      <div class="valor">$${formatearMoneda(promedio)}</div>
     </div>
     <div class="resumen-card">
       <div class="label">Comunicaciones pendientes</div>
@@ -2290,7 +2297,7 @@ function pintarContratos() {
     <tr>
       <td>${escapeHtml(c.numero) || '—'}</td>
       <td>${escapeHtml(c.clientes?.razon_social) || '—'}</td>
-      <td>$${Number(c.monto_total || 0).toFixed(2)}</td>
+      <td>$${formatearMoneda(c.monto_total || 0)}</td>
       <td>${FORMA_PAGO_LABELS[c.forma_pago] || '—'}</td>
       <td><span class="badge ${ESTADO_CONTRATO_BADGE[c.estado] || 'inactivo'}">${ESTADO_CONTRATO_LABELS[c.estado] || c.estado}</span></td>
       <td class="row-actions">
@@ -2750,8 +2757,8 @@ function pintarCartera() {
       <tr>
         <td>${escapeHtml(d.concepto)}</td>
         <td>${escapeHtml(tercero) || '—'}</td>
-        <td>$${Number(d.monto_original || 0).toFixed(2)}</td>
-        <td>$${Number(d.saldo_pendiente || 0).toFixed(2)}</td>
+        <td>$${formatearMoneda(d.monto_original || 0)}</td>
+        <td>$${formatearMoneda(d.saldo_pendiente || 0)}</td>
         <td>${d.fecha_vencimiento || '—'}</td>
         <td><span class="badge cartera-${estadoMostrado}">${ESTADO_CARTERA_LABELS[estadoMostrado] || estadoMostrado}</span></td>
         <td class="row-actions">
@@ -2771,15 +2778,15 @@ function pintarResumenCartera(lista) {
   document.getElementById('cartera-resumen').innerHTML = `
     <div class="resumen-card">
       <div class="label">Total documentos</div>
-      <div class="valor">$${totalOriginal.toFixed(2)}</div>
+      <div class="valor">$${formatearMoneda(totalOriginal)}</div>
     </div>
     <div class="resumen-card">
       <div class="label">Saldo pendiente</div>
-      <div class="valor">$${totalPendiente.toFixed(2)}</div>
+      <div class="valor">$${formatearMoneda(totalPendiente)}</div>
     </div>
     <div class="resumen-card">
       <div class="label">Total ${etiqueta}</div>
-      <div class="valor">$${totalCobrado.toFixed(2)}</div>
+      <div class="valor">$${formatearMoneda(totalCobrado)}</div>
     </div>
   `;
 }
@@ -2840,8 +2847,8 @@ function pintarModalCartera(doc) {
 
         ${esEdicion ? `
           <div class="totales-box">
-            <div class="fila"><span>Monto original</span><span>$${Number(doc.monto_original).toFixed(2)}</span></div>
-            <div class="fila total"><span>Saldo pendiente</span><span id="cart-saldo-display">$${Number(doc.saldo_pendiente).toFixed(2)}</span></div>
+            <div class="fila"><span>Monto original</span><span>$${formatearMoneda(doc.monto_original)}</span></div>
+            <div class="fila total"><span>Saldo pendiente</span><span id="cart-saldo-display">$${formatearMoneda(doc.saldo_pendiente)}</span></div>
             <div class="saldo-bar"><div class="fill" style="width:${doc.monto_original ? (100 - (doc.saldo_pendiente / doc.monto_original * 100)) : 0}%"></div></div>
           </div>
 
@@ -2999,7 +3006,7 @@ function pintarAbonosLista() {
   cont.innerHTML = modal_cartera_abonos.map(a => `
     <div class="abono-row">
       <span>${a.fecha || '—'}</span>
-      <span>$${Number(a.monto).toFixed(2)}</span>
+      <span>$${formatearMoneda(a.monto)}</span>
     </div>
   `).join('');
 }
@@ -3020,7 +3027,7 @@ async function registrarAbono() {
 
   const doc = cartera_cache.find(d => d.id === modal_cartera_id);
   if (monto > doc.saldo_pendiente) {
-    showMsg('cart-msg', 'El abono no puede ser mayor al saldo pendiente ($' + Number(doc.saldo_pendiente).toFixed(2) + ').', 'error');
+    showMsg('cart-msg', 'El abono no puede ser mayor al saldo pendiente ($' + formatearMoneda(doc.saldo_pendiente) + ').', 'error');
     return;
   }
 
@@ -3118,7 +3125,7 @@ async function cargarFacturasCartera() {
   cont.innerHTML = data.map(f => `
     <div class="adjunto-row">
       <div class="info">
-        <span class="nombre">🧾 N.° ${escapeHtml(f.numero_factura) || '—'} — $${Number(f.monto || 0).toFixed(2)}</span>
+        <span class="nombre">🧾 N.° ${escapeHtml(f.numero_factura) || '—'} — $${formatearMoneda(f.monto || 0)}</span>
         <span class="tamano">${f.fecha || ''}</span>
       </div>
       <div class="acciones">
@@ -3289,7 +3296,7 @@ function pintarCuentasGrid() {
     <div class="cuenta-card">
       <div class="nombre">${escapeHtml(c.nombre)}</div>
       <div class="banco">${escapeHtml(c.banco)} ${escapeHtml(c.numero_cuenta)}</div>
-      <div class="saldo">$${Number(c.saldo_actual || 0).toFixed(2)}</div>
+      <div class="saldo">$${formatearMoneda(c.saldo_actual || 0)}</div>
     </div>
   `).join('') + `
     <div class="cuenta-card add-new" onclick="abrirModalCuenta()">+ Agregar cuenta bancaria</div>
@@ -3309,7 +3316,7 @@ function pintarMovimientos() {
       <td><span class="badge mov-${m.tipo}">${m.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}</span></td>
       <td>${ORIGEN_MOV_LABELS[m.origen] || m.origen || '—'}</td>
       <td>${escapeHtml(m.descripcion) || '—'}</td>
-      <td class="monto-${m.tipo}">${m.tipo === 'ingreso' ? '+' : '-'}$${Number(m.monto || 0).toFixed(2)}</td>
+      <td class="monto-${m.tipo}">${m.tipo === 'ingreso' ? '+' : '-'}$${formatearMoneda(m.monto || 0)}</td>
     </tr>
   `).join('');
 }
@@ -3513,7 +3520,7 @@ function pintarEmpleados() {
       <td>${escapeHtml(e.cargo)}</td>
       <td>${TIPO_PERSONAL_LABELS[e.tipo_personal] || e.tipo_personal}</td>
       <td>${e.contratos ? 'N.° ' + escapeHtml(e.contratos.numero) : '—'}</td>
-      <td>$${Number(e.sueldo_base || 0).toFixed(2)}</td>
+      <td>$${formatearMoneda(e.sueldo_base || 0)}</td>
       <td><span class="badge ${e.activo ? 'activo' : 'inactivo'}">${e.activo ? 'Activo' : 'Inactivo'}</span></td>
       <td class="row-actions">
         <a onclick="abrirModalEmpleado('${e.id}')">Editar</a>
@@ -3636,7 +3643,7 @@ function pintarRolesPago() {
     <tr>
       <td>${escapeHtml(r.periodo)}</td>
       <td>${r.fecha_pago || '—'}</td>
-      <td>$${Number(r.total_pagado || 0).toFixed(2)}</td>
+      <td>$${formatearMoneda(r.total_pagado || 0)}</td>
       <td><span class="badge ${ESTADO_ROL_BADGE[r.estado] || 'inactivo'}">${ESTADO_ROL_LABELS[r.estado] || r.estado}</span></td>
       <td class="row-actions">
         <a onclick="abrirModalRolPago('${r.id}')">${r.estado === 'pagado' ? 'Ver' : 'Editar'}</a>
@@ -3726,10 +3733,10 @@ function pintarDetalleRolPago(bloqueado) {
       return `
         <div class="nomina-detalle-row">
           <div>${escapeHtml(d.empleados?.nombre_completo)}</div>
-          <div>$${Number(d.sueldo).toFixed(2)}</div>
-          <div>$${Number(d.otros_ingresos).toFixed(2)}</div>
-          <div>$${Number(d.deducciones).toFixed(2)}</div>
-          <div>$${liquido.toFixed(2)}</div>
+          <div>$${formatearMoneda(d.sueldo)}</div>
+          <div>$${formatearMoneda(d.otros_ingresos)}</div>
+          <div>$${formatearMoneda(d.deducciones)}</div>
+          <div>$${formatearMoneda(liquido)}</div>
         </div>
       `;
     }
@@ -3739,7 +3746,7 @@ function pintarDetalleRolPago(bloqueado) {
         <div><input type="text" value="${d.sueldo}" onchange="actualizarDetalleRol(${idx}, 'sueldo', this.value)"></div>
         <div><input type="text" value="${d.otros_ingresos}" onchange="actualizarDetalleRol(${idx}, 'otros_ingresos', this.value)"></div>
         <div><input type="text" value="${d.deducciones}" onchange="actualizarDetalleRol(${idx}, 'deducciones', this.value)"></div>
-        <div>$${liquido.toFixed(2)}</div>
+        <div>$${formatearMoneda(liquido)}</div>
       </div>
     `;
   }).join('');
@@ -3755,7 +3762,7 @@ function actualizarDetalleRol(idx, campo, valor) {
 function calcularTotalRolPago() {
   const total = modal_rol_detalle.reduce((acc, d) =>
     acc + (parseFloat(d.sueldo) || 0) + (parseFloat(d.otros_ingresos) || 0) - (parseFloat(d.deducciones) || 0), 0);
-  document.getElementById('rol-total-display').textContent = '$' + total.toFixed(2);
+  document.getElementById('rol-total-display').textContent = '$' + formatearMoneda(total);
   return total;
 }
 
@@ -5321,13 +5328,13 @@ async function cargarResumenDashboard() {
 
     <div class="dashboard-card neutro" onclick="irADashboardModulo('cartera')">
       <div class="titulo">Saldo pendiente por cobrar</div>
-      <div class="valor">$${totalPendienteCxC.toFixed(2)}</div>
+      <div class="valor">$${formatearMoneda(totalPendienteCxC)}</div>
       <div class="detalle">Total en documentos CxC abiertos</div>
     </div>
 
     <div class="dashboard-card neutro" onclick="irADashboardModulo('cartera')">
       <div class="titulo">Saldo pendiente por pagar</div>
-      <div class="valor">$${totalPendienteCxP.toFixed(2)}</div>
+      <div class="valor">$${formatearMoneda(totalPendienteCxP)}</div>
       <div class="detalle">Total en documentos CxP abiertos</div>
     </div>
 
@@ -5345,7 +5352,7 @@ async function cargarResumenDashboard() {
 
     <div class="dashboard-card neutro" onclick="irADashboardModulo('tesoreria')">
       <div class="titulo">Saldo total en cuentas</div>
-      <div class="valor">$${saldoTotalCuentas.toFixed(2)}</div>
+      <div class="valor">$${formatearMoneda(saldoTotalCuentas)}</div>
       <div class="detalle">Suma de todas las cuentas bancarias</div>
     </div>
   `;
