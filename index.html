@@ -2107,7 +2107,7 @@ async function convertirAContrato(proformaId) {
     numero: String(maxNumero + 1),
     cliente_id: proforma.cliente_id,
     proforma_origen_id: proforma.id,
-    monto_total: proforma.total,
+    monto_total: proforma.subtotal,
     estado: 'vigente'
   };
 
@@ -2148,7 +2148,7 @@ async function renderContratos() {
         <tr>
           <th>Número</th>
           <th>Cliente</th>
-          <th>Monto total</th>
+          <th>Monto (sin IVA)</th>
           <th>Forma de pago</th>
           <th>Estado</th>
           <th></th>
@@ -2280,7 +2280,7 @@ function pintarTabDatosContrato(contrato) {
     </div>
     <div class="field-row">
       <div>
-        <label>Monto total</label>
+        <label>Monto total (sin IVA)</label>
         <input type="text" id="cont-monto" value="${contrato?.monto_total ?? ''}" placeholder="0.00">
       </div>
       <div>
