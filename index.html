@@ -2129,6 +2129,8 @@ const ESTADO_CONTRATO_BADGE = { vigente: 'activo', cerrado: 'inactivo', anulado:
 const FORMA_PAGO_LABELS = { anticipo_saldo: 'Anticipo + saldo', cuotas: 'Cuotas', contraentrega: 'Contraentrega' };
 
 let contratos_cache = [];
+let contratos_filtros = { cliente_id: '', estado: '', fecha_desde: '', fecha_hasta: '' };
+let comunicaciones_pendientes_por_contrato = {};
 let modal_contrato_id = null;
 let modal_contrato_tab = 'datos';
 let modal_comunicaciones = [];
@@ -2140,9 +2142,22 @@ async function renderContratos() {
       <h2>Contratos</h2>
       <button class="btn" onclick="abrirModalContrato()">+ Nuevo contrato</button>
     </div>
-    <div class="search-bar">
-      <input type="text" id="contratos-search" placeholder="Buscar por número o cliente...">
+    <div class="correspondencia-filtros">
+      <select id="cont-filtro-cliente" onchange="aplicarFiltrosContratos()">
+        <option value="">Todos los clientes</option>
+      </select>
+      <select id="cont-filtro-estado" onchange="aplicarFiltrosContratos()">
+        <option value="">Todos los estados</option>
+        <option value="vigente">Vigente</option>
+        <option value="cerrado">Cerrado</option>
+        <option value="anulado">Anulado</option>
+      </select>
+      <input type="date" id="cont-filtro-fecha-desde" onchange="aplicarFiltrosContratos()" title="Fecha inicio desde">
+      <input type="date" id="cont-filtro-fecha-hasta" onchange="aplicarFiltrosContratos()" title="Fecha inicio hasta">
+      <input type="text" id="contratos-search" placeholder="Buscar por número...">
+      <button class="btn btn-secondary" onclick="limpiarFiltrosContratos()">Limpiar filtros</button>
     </div>
+    <div class="resumen-cartera" id="contratos-resumen"></div>
     <table class="data-table">
       <thead>
         <tr>
@@ -2160,14 +2175,15 @@ async function renderContratos() {
     </table>
   `;
 
-  document.getElementById('contratos-search').addEventListener('input', (e) => {
-    pintarContratos(filtrar(contratos_cache, e.target.value, ['numero']));
-  });
+  document.getElementById('contratos-search').addEventListener('input', () => pintarContratos());
 
   if (!clientes_cache.length) {
     const { data } = await sb.from('clientes').select('*').eq('activo', true);
     clientes_cache = data || [];
   }
+
+  document.getElementById('cont-filtro-cliente').innerHTML += clientes_cache
+    .map(c => '<option value="' + c.id + '">' + escapeHtml(c.razon_social) + '</option>').join('');
 
   const { data, error } = await sb
     .from('contratos')
@@ -2180,13 +2196,94 @@ async function renderContratos() {
     return;
   }
   contratos_cache = data;
-  pintarContratos(contratos_cache);
+
+  // Comunicaciones pendientes por contrato, para el indicador del resumen
+  const { data: comsPendientes } = await sb
+    .from('contrato_comunicaciones')
+    .select('contrato_id')
+    .eq('estado_respuesta', 'pendiente');
+  comunicaciones_pendientes_por_contrato = {};
+  (comsPendientes || []).forEach(c => {
+    comunicaciones_pendientes_por_contrato[c.contrato_id] = (comunicaciones_pendientes_por_contrato[c.contrato_id] || 0) + 1;
+  });
+
+  pintarContratos();
 }
 
-function pintarContratos(lista) {
+function aplicarFiltrosContratos() {
+  contratos_filtros.cliente_id = document.getElementById('cont-filtro-cliente').value;
+  contratos_filtros.estado = document.getElementById('cont-filtro-estado').value;
+  contratos_filtros.fecha_desde = document.getElementById('cont-filtro-fecha-desde').value;
+  contratos_filtros.fecha_hasta = document.getElementById('cont-filtro-fecha-hasta').value;
+  pintarContratos();
+}
+
+function limpiarFiltrosContratos() {
+  document.getElementById('cont-filtro-cliente').value = '';
+  document.getElementById('cont-filtro-estado').value = '';
+  document.getElementById('cont-filtro-fecha-desde').value = '';
+  document.getElementById('cont-filtro-fecha-hasta').value = '';
+  document.getElementById('contratos-search').value = '';
+  contratos_filtros = { cliente_id: '', estado: '', fecha_desde: '', fecha_hasta: '' };
+  pintarContratos();
+}
+
+function pintarResumenContratos(lista) {
+  const totalMonto = lista.reduce((acc, c) => acc + Number(c.monto_total || 0), 0);
+  const vigentes = lista.filter(c => c.estado === 'vigente').length;
+  const cerradosOAnulados = lista.filter(c => c.estado !== 'vigente').length;
+  const promedio = lista.length ? totalMonto / lista.length : 0;
+  const totalComunicacionesPendientes = lista.reduce((acc, c) => acc + (comunicaciones_pendientes_por_contrato[c.id] || 0), 0);
+
+  document.getElementById('contratos-resumen').innerHTML = `
+    <div class="resumen-card">
+      <div class="label">Monto total (sin IVA)</div>
+      <div class="valor">$${totalMonto.toFixed(2)}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Contratos vigentes</div>
+      <div class="valor">${vigentes}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Cerrados / anulados</div>
+      <div class="valor">${cerradosOAnulados}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Monto promedio</div>
+      <div class="valor">$${promedio.toFixed(2)}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Comunicaciones pendientes</div>
+      <div class="valor">${totalComunicacionesPendientes}</div>
+    </div>
+  `;
+}
+
+function pintarContratos() {
+  let lista = contratos_cache;
+
+  if (contratos_filtros.cliente_id) {
+    lista = lista.filter(c => c.cliente_id === contratos_filtros.cliente_id);
+  }
+  if (contratos_filtros.estado) {
+    lista = lista.filter(c => c.estado === contratos_filtros.estado);
+  }
+  if (contratos_filtros.fecha_desde) {
+    lista = lista.filter(c => c.fecha_inicio && c.fecha_inicio >= contratos_filtros.fecha_desde);
+  }
+  if (contratos_filtros.fecha_hasta) {
+    lista = lista.filter(c => c.fecha_inicio && c.fecha_inicio <= contratos_filtros.fecha_hasta);
+  }
+  const busqueda = document.getElementById('contratos-search')?.value || '';
+  if (busqueda.trim()) {
+    lista = filtrar(lista, busqueda, ['numero']);
+  }
+
+  pintarResumenContratos(lista);
+
   const tbody = document.getElementById('contratos-tbody');
   if (!lista.length) {
-    tbody.innerHTML = '<tr><td colspan="6">No hay contratos registrados.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6">No hay contratos que coincidan con los filtros.</td></tr>';
     return;
   }
   tbody.innerHTML = lista.map(c => `
