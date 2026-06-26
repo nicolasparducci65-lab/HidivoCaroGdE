@@ -2115,7 +2115,7 @@ async function convertirAContrato(proformaId) {
     cliente_id: proforma.cliente_id,
     proforma_origen_id: proforma.id,
     monto_total: proforma.subtotal,
-    estado: 'vigente'
+    estado: 'por_iniciar'
   };
 
   const { data, error } = await sb.from('contratos').insert(payload).select().single();
@@ -2131,8 +2131,8 @@ async function convertirAContrato(proformaId) {
 // =====================================================================
 // MÓDULO: CONTRATOS (con Comunicaciones)
 // =====================================================================
-const ESTADO_CONTRATO_LABELS = { vigente: 'Vigente', cerrado: 'Cerrado', anulado: 'Anulado' };
-const ESTADO_CONTRATO_BADGE = { vigente: 'activo', cerrado: 'inactivo', anulado: 'inactivo' };
+const ESTADO_CONTRATO_LABELS = { por_iniciar: 'Por iniciar', vigente: 'Vigente', cerrado: 'Cerrado', anulado: 'Anulado' };
+const ESTADO_CONTRATO_BADGE = { por_iniciar: 'cartera-pendiente', vigente: 'activo', cerrado: 'inactivo', anulado: 'inactivo' };
 const FORMA_PAGO_LABELS = { anticipo_saldo: 'Anticipo + saldo', cuotas: 'Cuotas', contraentrega: 'Contraentrega' };
 
 let contratos_cache = [];
@@ -2155,6 +2155,7 @@ async function renderContratos() {
       </select>
       <select id="cont-filtro-estado" onchange="aplicarFiltrosContratos()">
         <option value="">Todos los estados</option>
+        <option value="por_iniciar">Por iniciar</option>
         <option value="vigente">Vigente</option>
         <option value="cerrado">Cerrado</option>
         <option value="anulado">Anulado</option>
@@ -2248,8 +2249,9 @@ function mesesDeDuracion(fechaInicio, fechaFin) {
 
 function pintarResumenContratos(lista) {
   const totalMonto = lista.reduce((acc, c) => acc + Number(c.monto_total || 0), 0);
+  const porIniciar = lista.filter(c => c.estado === 'por_iniciar').length;
   const vigentes = lista.filter(c => c.estado === 'vigente').length;
-  const cerradosOAnulados = lista.filter(c => c.estado !== 'vigente').length;
+  const cerradosOAnulados = lista.filter(c => c.estado === 'cerrado' || c.estado === 'anulado').length;
   const promedio = lista.length ? totalMonto / lista.length : 0;
   const totalComunicacionesPendientes = lista.reduce((acc, c) => acc + (comunicaciones_pendientes_por_contrato[c.id] || 0), 0);
 
@@ -2265,6 +2267,10 @@ function pintarResumenContratos(lista) {
     <div class="resumen-card">
       <div class="label">Monto total (sin IVA)</div>
       <div class="valor">$${formatearMoneda(totalMonto)}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Por iniciar</div>
+      <div class="valor">${porIniciar}</div>
     </div>
     <div class="resumen-card">
       <div class="label">Contratos vigentes</div>
@@ -2401,7 +2407,7 @@ function pintarTabDatosContrato(contrato) {
         <label>Estado</label>
         <select id="cont-estado">
           ${Object.entries(ESTADO_CONTRATO_LABELS).map(([k, v]) =>
-            `<option value="${k}" ${(contrato?.estado || 'vigente') === k ? 'selected' : ''}>${v}</option>`
+            `<option value="${k}" ${(contrato?.estado || 'por_iniciar') === k ? 'selected' : ''}>${v}</option>`
           ).join('')}
         </select>
       </div>
