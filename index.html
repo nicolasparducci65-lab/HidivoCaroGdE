@@ -5029,81 +5029,169 @@ function construirParrafosOficio(cuerpo) {
   return (cuerpo || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
 }
 
+// Justificación real de texto: distribuye espacio extra entre palabras
+// para que cada línea (excepto la última de cada párrafo) llegue
+// exactamente al ancho del contenido, igual que un oficio formal.
+function escribirParrafoJustificado(doc, texto, x, yInicial, anchoContenido, lineHeight, opciones) {
+  opciones = opciones || {};
+  let y = yInicial;
+  const lineas = doc.splitTextToSize(texto, anchoContenido);
+
+  lineas.forEach((linea, idx) => {
+    if (opciones.onNuevaLinea) {
+      const resultado = opciones.onNuevaLinea(y);
+      if (resultado) y = resultado;
+    }
+
+    const esUltimaLinea = idx === lineas.length - 1;
+    const anchoLinea = doc.getTextWidth(linea);
+
+    if (!esUltimaLinea && anchoLinea < anchoContenido * 0.98) {
+      const palabras = linea.split(' ');
+      if (palabras.length > 1) {
+        const anchoPalabras = palabras.reduce((acc, p) => acc + doc.getTextWidth(p), 0);
+        const espacioNecesario = (anchoContenido - anchoPalabras) / (palabras.length - 1);
+        let xPos = x;
+        palabras.forEach((palabra) => {
+          doc.text(palabra, xPos, y);
+          xPos += doc.getTextWidth(palabra) + espacioNecesario;
+        });
+      } else {
+        doc.text(linea, x, y);
+      }
+    } else {
+      doc.text(linea, x, y);
+    }
+    y += lineHeight;
+  });
+
+  return y;
+}
+
 function generarPdfOficio(datos) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'letter' });
   const pageWidth = 215.9;
+  const pageHeight = 279.4;
   const marginLeft = 25;
   const marginRight = 25;
+  const marginBottom = 38;
   const contentWidth = pageWidth - marginLeft - marginRight;
-  let y = 20;
+  const lineHeight = 5.6;
+  let y = 18;
+  let paginaActual = 1;
 
-  doc.addImage(LOGO_HIDIVO_BASE64, 'PNG', pageWidth - marginRight - 45, 12, 45, 9.4);
+  function pintarMembrete() {
+    doc.addImage(LOGO_HIDIVO_BASE64, 'PNG', pageWidth - marginRight - 42, 14, 42, 8.8);
+    doc.setDrawColor(190, 190, 190);
+    doc.setLineWidth(0.3);
+    doc.line(marginLeft, 26, pageWidth - marginRight, 26);
+  }
 
-  y = 30;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
+  function pintarPiePagina(numeroPagina) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(110, 110, 110);
+    const lineaY = pageHeight - 30;
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.2);
+    doc.line(marginLeft, lineaY, pageWidth - marginRight, lineaY);
+
+    doc.text('gerencia@hidivo.com', pageWidth - marginRight, lineaY + 5, { align: 'right' });
+    doc.text('Direcci\u00f3n: Metr\u00f3polis 2C, MZ 0921, Local 4', pageWidth - marginRight, lineaY + 9.5, { align: 'right' });
+    doc.text('Guayaquil - Ecuador  |  Tel.: 0998097781', pageWidth - marginRight, lineaY + 14, { align: 'right' });
+
+    doc.setFontSize(8);
+    doc.text('P\u00e1gina ' + numeroPagina, marginLeft, lineaY + 9.5);
+    doc.setTextColor(0, 0, 0);
+  }
+
+  function nuevaPagina() {
+    pintarPiePagina(paginaActual);
+    doc.addPage();
+    paginaActual++;
+    pintarMembrete();
+    return 38;
+  }
+
+  pintarMembrete();
+  y = 36;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(12, 68, 124);
   doc.text(datos.numero_completo, marginLeft, y);
+  doc.setTextColor(0, 0, 0);
 
-  y += 12;
+  y += 10;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10.5);
   doc.text(datos.fecha_larga, marginLeft, y);
 
-  y += 14;
+  y += 12;
   if (datos.destinatario_titulo) {
     doc.text(datos.destinatario_titulo, marginLeft, y);
-    y += 6;
+    y += 5.5;
   }
   doc.setFont('helvetica', 'bold');
   doc.text(datos.destinatario_nombre || '', marginLeft, y);
-  y += 6;
+  y += 5.5;
   if (datos.destinatario_entidad) {
+    doc.setFont('helvetica', 'normal');
     doc.text(datos.destinatario_entidad, marginLeft, y);
-    y += 6;
+    y += 5.5;
   }
   doc.setFont('helvetica', 'normal');
   doc.text((datos.destinatario_ciudad || 'Ciudad') + '.-', marginLeft, y);
 
   if (datos.referencia) {
-    y += 12;
+    y += 10;
     doc.setFont('helvetica', 'bold');
-    const refLines = doc.splitTextToSize('Ref.: ' + datos.referencia, contentWidth);
+    doc.setFontSize(10.5);
+    const refTexto = 'Ref.: ' + datos.referencia;
+    const refLines = doc.splitTextToSize(refTexto, contentWidth);
     refLines.forEach(line => {
       doc.text(line, marginLeft, y);
-      doc.setLineWidth(0.1);
-      doc.line(marginLeft, y + 1, marginLeft + doc.getTextWidth(line), y + 1);
-      y += 6;
+      doc.setLineWidth(0.25);
+      doc.line(marginLeft, y + 1.2, marginLeft + doc.getTextWidth(line), y + 1.2);
+      y += 5.6;
     });
-    doc.setFont('helvetica', 'normal');
   }
 
-  y += 8;
+  y += 7;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10.5);
+
   const parrafos = construirParrafosOficio(datos.cuerpo);
   parrafos.forEach(parrafo => {
-    const lines = doc.splitTextToSize(parrafo, contentWidth);
-    lines.forEach(line => {
-      if (y > 260) { doc.addPage(); y = 25; }
-      doc.text(line, marginLeft, y, { align: 'justify', maxWidth: contentWidth });
-      y += 6;
+    y = escribirParrafoJustificado(doc, parrafo, marginLeft, y, contentWidth, lineHeight, {
+      onNuevaLinea: (yActual) => {
+        if (yActual > pageHeight - marginBottom) {
+          return nuevaPagina();
+        }
+        return null;
+      }
     });
-    y += 6;
+    y += 5.5;
   });
 
-  y += 10;
-  doc.text('Atentamente,', marginLeft, y);
-  y += 16;
-  doc.text('Por HiDiVo S.A.S.', marginLeft, y);
-  y += 16;
-  doc.setFont('helvetica', 'normal');
-  doc.text(datos.firmante_nombre || '', marginLeft, y);
-  y += 5;
-  doc.text(datos.firmante_cargo || '', marginLeft, y);
+  if (y > pageHeight - marginBottom - 30) {
+    y = nuevaPagina();
+  }
 
-  doc.setFontSize(9);
-  doc.setTextColor(80, 80, 80);
-  doc.text('gerencia@hidivo.com', pageWidth - marginRight, 270, { align: 'right' });
-  doc.text('Direcci\u00f3n: Metr\u00f3polis 2C, MZ 0921, Local 4', pageWidth - marginRight, 275, { align: 'right' });
-  doc.text('Guayaquil - Ecuador', pageWidth - marginRight, 280, { align: 'right' });
-  doc.text('Tel.: 0998097781', pageWidth - marginRight, 285, { align: 'right' });
+  y += 6;
+  doc.text('Atentamente,', marginLeft, y);
+  y += 14;
+  doc.text('Por HiDiVo S.A.S.', marginLeft, y);
+  y += 14;
+  doc.setFont('helvetica', 'bold');
+  doc.text(datos.firmante_nombre || '', marginLeft, y);
+  doc.setFont('helvetica', 'normal');
+  y += 5;
+  doc.setFontSize(9.5);
+  doc.text((datos.firmante_cargo || '').toUpperCase(), marginLeft, y);
+
+  pintarPiePagina(paginaActual);
 
   return doc;
 }
