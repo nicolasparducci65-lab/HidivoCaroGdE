@@ -5466,6 +5466,8 @@ let rubros_obra_cache = [];   // rubros de la obra seleccionada en el modal de c
 let obra_costos_cache = [];
 let modal_obra_id = null;
 let modal_costo_id = null;
+let modal_costo_sri_id = null;
+let sri_comprobantes_cache = [];
 let costos_filtros = { obra_id: '', fase: '', proveedor_id: '', fecha_desde: '', fecha_hasta: '' };
 
 const FASES_COSTO = ['Materiales', 'Mano de obra', 'Equipos', 'Transporte', 'Subcontratos', 'Indirectos', 'Fiscalizaci\u00f3n', 'Dise\u00f1o', 'Gastos'];
@@ -5501,6 +5503,7 @@ async function renderCostos() {
     <div class="subtabs-bar">
       <button id="costos-tab-obras" onclick="cambiarTabCostos('obras')">Obras</button>
       <button id="costos-tab-registro" onclick="cambiarTabCostos('registro')">Registro de costos</button>
+      <button id="costos-tab-sri" onclick="cambiarTabCostos('sri')">Facturas SRI</button>
       <button id="costos-tab-reportes" onclick="cambiarTabCostos('reportes')">Reportes</button>
       ${esAdminCostos ? '<button id="costos-tab-plan" onclick="cambiarTabCostos(\'plan\')">Plan de cuentas</button>' : ''}
     </div>
@@ -5524,13 +5527,14 @@ async function renderCostos() {
 
 function cambiarTabCostos(tab) {
   costos_tab = tab;
-  ['obras', 'registro', 'reportes', 'plan'].forEach(t => {
+  ['obras', 'registro', 'reportes', 'plan', 'sri'].forEach(t => {
     const btn = document.getElementById('costos-tab-' + t);
     if (btn) btn.classList.toggle('active', t === tab);
   });
   if (tab === 'obras') pintarTabObras();
   else if (tab === 'registro') pintarTabRegistroCostos();
   else if (tab === 'plan') pintarTabPlanCuentas();
+  else if (tab === 'sri') pintarTabFacturasSRI();
   else pintarTabReportesCostos();
 }
 
@@ -5943,7 +5947,7 @@ async function pintarTabRegistroCostos() {
 async function cargarCostos() {
   const { data, error } = await sb
     .from('obra_costos')
-    .select('*, obras(codigo, nombre), obra_rubros(codigo, descripcion), plan_cuentas(codigo, nombre), proveedores(razon_social), cartera_documentos(numero_documento)')
+    .select('*, obras(codigo, nombre), obra_rubros(codigo, descripcion), plan_cuentas(codigo, nombre), proveedores(razon_social), cartera_documentos(concepto)')
     .order('fecha', { ascending: false })
     .order('created_at', { ascending: false });
   if (error) {
@@ -5972,6 +5976,8 @@ function limpiarFiltrosCostos() {
 }
 
 function pintarCostos() {
+  const tbody = document.getElementById('costos-tbody');
+  if (!tbody) return; // no estamos en la pestaña de registro
   let lista = obra_costos_cache;
   if (costos_filtros.obra_id) lista = lista.filter(c => c.obra_id === costos_filtros.obra_id);
   if (costos_filtros.fase) lista = lista.filter(c => faseDeCuenta(c.plan_cuentas?.codigo) === costos_filtros.fase);
@@ -5991,7 +5997,6 @@ function pintarCostos() {
     </div>
   `;
 
-  const tbody = document.getElementById('costos-tbody');
   if (!lista.length) {
     tbody.innerHTML = '<tr><td colspan="8">No hay costos que coincidan con los filtros.</td></tr>';
     return;
@@ -6004,7 +6009,7 @@ function pintarCostos() {
       <td>${escapeHtml(c.plan_cuentas?.codigo) || '\u2014'}</td>
       <td>${faseDeCuenta(c.plan_cuentas?.codigo)}</td>
       <td>${escapeHtml(c.proveedores?.razon_social) || '\u2014'}</td>
-      <td>${escapeHtml(c.descripcion) || (c.cartera_documentos ? 'Doc. ' + escapeHtml(c.cartera_documentos.numero_documento) : '\u2014')}</td>
+      <td>${escapeHtml(c.descripcion) || (c.cartera_documentos ? 'Doc. ' + escapeHtml(c.cartera_documentos.concepto) : '\u2014')}</td>
       <td>$${formatearMoneda(c.monto)}</td>
     </tr>
   `).join('');
@@ -6017,7 +6022,7 @@ async function abrirModalCosto(id) {
   // Documentos CxP disponibles para vincular
   const { data: docsCxP } = await sb
     .from('cartera_documentos')
-    .select('id, numero_documento, monto_original, proveedores(razon_social)')
+    .select('id, concepto, monto_original, proveedores(razon_social)')
     .eq('tipo', 'por_pagar')
     .order('created_at', { ascending: false })
     .limit(100);
@@ -6073,7 +6078,7 @@ async function abrirModalCosto(id) {
             <label>Documento de Cartera CxP (opcional)</label>
             <select id="costo-documento">
               <option value="">Sin documento vinculado</option>
-              ${(docsCxP || []).map(d => '<option value="' + d.id + '" ' + (costo?.cartera_documento_id === d.id ? 'selected' : '') + '>' + escapeHtml(d.numero_documento) + ' \u2014 ' + escapeHtml(d.proveedores?.razon_social || '') + ' ($' + formatearMoneda(d.monto_original) + ')</option>').join('')}
+              ${(docsCxP || []).map(d => '<option value="' + d.id + '" ' + (costo?.cartera_documento_id === d.id ? 'selected' : '') + '>' + escapeHtml(d.concepto) + ' \u2014 ' + escapeHtml(d.proveedores?.razon_social || '') + ' ($' + formatearMoneda(d.monto_original) + ')</option>').join('')}
             </select>
           </div>
         </div>
@@ -6294,6 +6299,338 @@ async function generarReporteCostos() {
       El costo unitario real se calcula como total gastado \u00f7 cantidad ejecutada (actualiza el avance de cada rubro en la pesta\u00f1a Obras > Rubros).
     </p>
   `;
+}
+
+// ------------------- Pestaña: FACTURAS SRI -------------------
+
+let sri_filtros = { direccion: '', estado: 'pendiente' };
+let sri_preview = [];
+
+function normalizarEncabezadoSri(h) {
+  return String(h || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
+}
+
+function parsearMontoSri(v) {
+  if (v === null || v === undefined) return 0;
+  let s = String(v).trim();
+  if (!s) return 0;
+  const tieneComa = s.includes(','), tienePunto = s.includes('.');
+  if (tieneComa && tienePunto) s = s.replace(/\./g, '').replace(',', '.');
+  else if (tieneComa) s = s.replace(',', '.');
+  return parseFloat(s) || 0;
+}
+
+function parsearFechaSri(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return m[3] + '-' + m[2] + '-' + m[1];
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[0].slice(0, 10);
+  return null;
+}
+
+function sumarDiasFecha(fechaIso, dias) {
+  const d = new Date(fechaIso + 'T00:00:00');
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+async function pintarTabFacturasSRI() {
+  const cont = document.getElementById('costos-contenido');
+  cont.innerHTML = `
+    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:10px;padding:16px;margin-bottom:16px;">
+      <label style="font-weight:600;">Importar reporte del SRI</label>
+      <p style="font-size:12px;color:var(--color-text-muted);margin:4px 0 12px;">
+        Descarga del portal del SRI (SRI en l\u00ednea &gt; Facturaci\u00f3n electr\u00f3nica &gt; Comprobantes recibidos/emitidos) el reporte en formato TXT y s\u00fabelo aqu\u00ed. Los comprobantes ya importados se omiten autom\u00e1ticamente por su clave de acceso.
+      </p>
+      <div class="field-row">
+        <div>
+          <label>Tipo de reporte</label>
+          <select id="sri-import-direccion">
+            <option value="recibido">Recibidos (compras \u2192 CxP)</option>
+            <option value="emitido">Emitidos (ventas \u2192 CxC)</option>
+          </select>
+        </div>
+        <div>
+          <label>Archivo TXT del SRI</label>
+          <input type="file" id="sri-archivo" accept=".txt,.csv,.tsv" onchange="manejarArchivoSri()">
+        </div>
+      </div>
+      <div id="sri-preview-wrap"></div>
+      <div id="sri-import-msg"></div>
+    </div>
+
+    <div class="correspondencia-filtros">
+      <select id="sri-filtro-direccion" onchange="aplicarFiltrosSri()">
+        <option value="">Recibidas y emitidas</option>
+        <option value="recibido">Solo recibidas</option>
+        <option value="emitido">Solo emitidas</option>
+      </select>
+      <select id="sri-filtro-estado" onchange="aplicarFiltrosSri()">
+        <option value="">Todos los estados</option>
+        <option value="pendiente" selected>Pendientes</option>
+        <option value="clasificado">Clasificados</option>
+        <option value="descartado">Descartados</option>
+      </select>
+    </div>
+    <div class="resumen-cartera" id="sri-resumen"></div>
+    <table class="data-table">
+      <thead>
+        <tr><th>Fecha</th><th>Tipo</th><th>Serie</th><th>Contraparte</th><th>Subtotal</th><th>IVA</th><th>Total</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody id="sri-tbody"><tr><td colspan="9">Cargando...</td></tr></tbody>
+    </table>
+  `;
+  await cargarComprobantesSri();
+}
+
+async function cargarComprobantesSri() {
+  const { data, error } = await sb
+    .from('sri_comprobantes')
+    .select('*')
+    .order('fecha_emision', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('sri-tbody').innerHTML = '<tr><td colspan="9">Error: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  sri_comprobantes_cache = data || [];
+  pintarComprobantesSri();
+}
+
+function aplicarFiltrosSri() {
+  sri_filtros.direccion = document.getElementById('sri-filtro-direccion').value;
+  sri_filtros.estado = document.getElementById('sri-filtro-estado').value;
+  pintarComprobantesSri();
+}
+
+function pintarComprobantesSri() {
+  let lista = sri_comprobantes_cache;
+  if (sri_filtros.direccion) lista = lista.filter(c => c.direccion === sri_filtros.direccion);
+  if (sri_filtros.estado) lista = lista.filter(c => c.estado === sri_filtros.estado);
+
+  const pendientes = sri_comprobantes_cache.filter(c => c.estado === 'pendiente');
+  const totalPendiente = pendientes.reduce((acc, c) => acc + Number(c.importe_total || 0), 0);
+  document.getElementById('sri-resumen').innerHTML = `
+    <div class="resumen-card">
+      <div class="label">Pendientes de clasificar</div>
+      <div class="valor">${pendientes.length}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Monto total pendiente</div>
+      <div class="valor">$${formatearMoneda(totalPendiente)}</div>
+    </div>
+  `;
+
+  const tbody = document.getElementById('sri-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="9">No hay comprobantes que coincidan con los filtros.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(c => {
+    const estadoBadge = c.estado === 'pendiente'
+      ? '<span class="badge cartera-pendiente">Pendiente</span>'
+      : (c.estado === 'clasificado' ? '<span class="badge activo">Clasificado</span>' : '<span class="badge inactivo">Descartado</span>');
+    let acciones = '';
+    if (c.estado === 'pendiente') {
+      acciones = '<a onclick="crearDocumentoDesdeSri(\'' + c.id + '\')">' + (c.direccion === 'recibido' ? 'Crear CxP' : 'Crear CxC') + '</a> ' +
+                 '<a style="color:var(--color-danger);" onclick="descartarComprobanteSri(\'' + c.id + '\', true)">Descartar</a>';
+    } else if (c.estado === 'descartado') {
+      acciones = '<a onclick="descartarComprobanteSri(\'' + c.id + '\', false)">Restaurar</a>';
+    }
+    return `
+      <tr>
+        <td>${c.fecha_emision || '\u2014'}</td>
+        <td>${escapeHtml(c.tipo_comprobante) || '\u2014'}</td>
+        <td>${escapeHtml(c.serie_comprobante) || '\u2014'}</td>
+        <td>${escapeHtml(c.razon_social_contraparte) || '\u2014'}<br><span style="font-size:11px;color:var(--color-text-muted);">${escapeHtml(c.ruc_contraparte) || ''}</span></td>
+        <td>$${formatearMoneda(c.valor_sin_impuestos)}</td>
+        <td>$${formatearMoneda(c.iva)}</td>
+        <td><strong>$${formatearMoneda(c.importe_total)}</strong></td>
+        <td>${estadoBadge}</td>
+        <td class="row-actions">${acciones}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function parsearReporteSri(texto) {
+  const lineas = texto.split(/\r?\n/).filter(l => l.trim());
+  if (lineas.length < 2) return { error: 'El archivo no tiene filas de datos.' };
+
+  const seps = ['\t', ';', ','];
+  const sep = seps.reduce((a, b) => (lineas[0].split(a).length >= lineas[0].split(b).length ? a : b));
+  const encabezados = lineas[0].split(sep).map(normalizarEncabezadoSri);
+  const idx = (nombres) => encabezados.findIndex(h => nombres.includes(h));
+
+  const cols = {
+    ruc: idx(['RUC_EMISOR', 'RUC_PROVEEDOR', 'IDENTIFICACION_RECEPTOR', 'RUC_RECEPTOR', 'RUC', 'IDENTIFICACION']),
+    razon: idx(['RAZON_SOCIAL_EMISOR', 'RAZON_SOCIAL_RECEPTOR', 'RAZON_SOCIAL', 'PROVEEDOR', 'CLIENTE']),
+    tipo: idx(['TIPO_COMPROBANTE', 'TIPO_DE_COMPROBANTE', 'COMPROBANTE']),
+    serie: idx(['SERIE_COMPROBANTE', 'SERIE_Y_NUMERO', 'NUMERO_COMPROBANTE', 'SERIE']),
+    clave: idx(['CLAVE_ACCESO', 'CLAVE_DE_ACCESO', 'NUMERO_AUTORIZACION', 'AUTORIZACION', 'NUMERO_DE_AUTORIZACION']),
+    fechaEmision: idx(['FECHA_EMISION', 'FECHA_DE_EMISION', 'FECHA_Y_HORA_EMISION']),
+    fechaAut: idx(['FECHA_AUTORIZACION', 'FECHA_Y_HORA_AUTORIZACION', 'FECHA_DE_AUTORIZACION']),
+    subtotal: idx(['VALOR_SIN_IMPUESTOS', 'SUBTOTAL', 'BASE_IMPONIBLE', 'VALOR_SIN_IMPUESTO']),
+    iva: idx(['IVA', 'VALOR_IVA', 'MONTO_IVA']),
+    total: idx(['IMPORTE_TOTAL', 'VALOR_TOTAL', 'TOTAL'])
+  };
+
+  if (cols.clave === -1) {
+    return { error: 'No se encontr\u00f3 la columna de clave de acceso / n\u00famero de autorizaci\u00f3n. Encabezados detectados: ' + encabezados.join(', ') };
+  }
+
+  const comprobantes = [];
+  let ignoradas = 0;
+  for (let i = 1; i < lineas.length; i++) {
+    const campos = lineas[i].split(sep);
+    const clave = (campos[cols.clave] || '').trim();
+    if (!clave) { ignoradas++; continue; }
+    comprobantes.push({
+      clave_acceso: clave,
+      ruc_contraparte: cols.ruc !== -1 ? (campos[cols.ruc] || '').trim() : null,
+      razon_social_contraparte: cols.razon !== -1 ? (campos[cols.razon] || '').trim() : null,
+      tipo_comprobante: cols.tipo !== -1 ? (campos[cols.tipo] || '').trim() : null,
+      serie_comprobante: cols.serie !== -1 ? (campos[cols.serie] || '').trim() : null,
+      fecha_emision: cols.fechaEmision !== -1 ? parsearFechaSri(campos[cols.fechaEmision]) : null,
+      fecha_autorizacion: cols.fechaAut !== -1 ? parsearFechaSri(campos[cols.fechaAut]) : null,
+      valor_sin_impuestos: cols.subtotal !== -1 ? parsearMontoSri(campos[cols.subtotal]) : 0,
+      iva: cols.iva !== -1 ? parsearMontoSri(campos[cols.iva]) : 0,
+      importe_total: cols.total !== -1 ? parsearMontoSri(campos[cols.total]) : 0
+    });
+  }
+  return { comprobantes, ignoradas };
+}
+
+function manejarArchivoSri() {
+  const input = document.getElementById('sri-archivo');
+  const archivo = input.files[0];
+  if (!archivo) return;
+  clearMsg('sri-import-msg');
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const resultado = parsearReporteSri(reader.result);
+    if (resultado.error) {
+      showMsg('sri-import-msg', resultado.error, 'error');
+      document.getElementById('sri-preview-wrap').innerHTML = '';
+      sri_preview = [];
+      return;
+    }
+    sri_preview = resultado.comprobantes;
+    const total = sri_preview.reduce((acc, c) => acc + c.importe_total, 0);
+    document.getElementById('sri-preview-wrap').innerHTML = `
+      <p style="font-size:13px;margin:10px 0;">
+        Se leyeron <strong>${sri_preview.length}</strong> comprobantes por un total de <strong>$${formatearMoneda(total)}</strong>${resultado.ignoradas ? ' (' + resultado.ignoradas + ' filas sin clave de acceso ignoradas)' : ''}.
+      </p>
+      <button class="btn" onclick="importarComprobantesSri()">Importar comprobantes nuevos</button>
+    `;
+  };
+  reader.onerror = () => showMsg('sri-import-msg', 'No se pudo leer el archivo.', 'error');
+  reader.readAsText(archivo, 'utf-8');
+}
+
+async function importarComprobantesSri() {
+  if (!sri_preview.length) return;
+  const direccion = document.getElementById('sri-import-direccion').value;
+  showMsg('sri-import-msg', 'Importando...', 'success');
+
+  // Deduplicación por clave de acceso, consultando en lotes
+  const claves = sri_preview.map(c => c.clave_acceso);
+  const existentes = new Set();
+  for (let i = 0; i < claves.length; i += 200) {
+    const { data } = await sb.from('sri_comprobantes').select('clave_acceso').in('clave_acceso', claves.slice(i, i + 200));
+    (data || []).forEach(d => existentes.add(d.clave_acceso));
+  }
+
+  const { data: { user } } = await sb.auth.getUser();
+  const nuevos = sri_preview
+    .filter(c => !existentes.has(c.clave_acceso))
+    .map(c => ({ ...c, direccion, creado_por: user.id }));
+
+  if (!nuevos.length) {
+    showMsg('sri-import-msg', 'Todos los comprobantes del archivo ya estaban importados. Nada nuevo que agregar.', 'success');
+    return;
+  }
+
+  let insertados = 0;
+  for (let i = 0; i < nuevos.length; i += 200) {
+    const { error } = await sb.from('sri_comprobantes').insert(nuevos.slice(i, i + 200));
+    if (error) {
+      showMsg('sri-import-msg', 'Error al importar (lote ' + (i / 200 + 1) + '): ' + error.message, 'error');
+      return;
+    }
+    insertados += Math.min(200, nuevos.length - i);
+  }
+
+  showMsg('sri-import-msg', 'Importados ' + insertados + ' comprobantes nuevos (' + existentes.size + ' ya exist\u00edan y se omitieron).', 'success');
+  document.getElementById('sri-archivo').value = '';
+  document.getElementById('sri-preview-wrap').innerHTML = '';
+  sri_preview = [];
+  await cargarComprobantesSri();
+}
+
+async function crearDocumentoDesdeSri(id) {
+  const c = sri_comprobantes_cache.find(x => x.id === id);
+  if (!c) return;
+
+  if (!c.ruc_contraparte) {
+    alert('Este comprobante no tiene RUC de contraparte; reg\u00edstralo manualmente en Cartera.');
+    return;
+  }
+
+  const esRecibido = c.direccion === 'recibido';
+  const tabla = esRecibido ? 'proveedores' : 'clientes';
+
+  // Buscar la contraparte por RUC, o crearla si no existe
+  const { data: encontrados } = await sb.from(tabla).select('*').eq('ruc', c.ruc_contraparte).limit(1);
+  let tercero = encontrados && encontrados[0];
+  if (!tercero) {
+    const { data: creado, error: errorCrear } = await sb.from(tabla)
+      .insert({ razon_social: c.razon_social_contraparte || c.ruc_contraparte, ruc: c.ruc_contraparte })
+      .select().single();
+    if (errorCrear) {
+      alert('Error creando ' + (esRecibido ? 'el proveedor' : 'el cliente') + ': ' + errorCrear.message);
+      return;
+    }
+    tercero = creado;
+  }
+
+  const concepto = (c.tipo_comprobante || 'Comprobante') + ' ' + (c.serie_comprobante || '') + ' \u2014 ' + (c.razon_social_contraparte || '') + ' (SRI)';
+  const fechaVencimiento = (tercero.dias_credito > 0 && c.fecha_emision)
+    ? sumarDiasFecha(c.fecha_emision, tercero.dias_credito)
+    : null;
+
+  const payload = {
+    tipo: esRecibido ? 'por_pagar' : 'por_cobrar',
+    concepto: concepto.trim(),
+    monto_original: Number(c.importe_total || 0),
+    saldo_pendiente: Number(c.importe_total || 0),
+    fecha_emision: c.fecha_emision,
+    fecha_vencimiento: fechaVencimiento,
+    estado: 'pendiente'
+  };
+  if (esRecibido) payload.proveedor_id = tercero.id;
+  else payload.cliente_id = tercero.id;
+
+  const { data: doc, error } = await sb.from('cartera_documentos').insert(payload).select().single();
+  if (error) {
+    alert('Error creando el documento de Cartera: ' + error.message);
+    return;
+  }
+
+  await sb.from('sri_comprobantes').update({ estado: 'clasificado', cartera_documento_id: doc.id }).eq('id', id);
+  await cargarComprobantesSri();
+}
+
+async function descartarComprobanteSri(id, descartar) {
+  const { error } = await sb.from('sri_comprobantes').update({ estado: descartar ? 'descartado' : 'pendiente' }).eq('id', id);
+  if (error) {
+    alert('Error: ' + error.message);
+    return;
+  }
+  await cargarComprobantesSri();
 }
 
 // =====================================================================
