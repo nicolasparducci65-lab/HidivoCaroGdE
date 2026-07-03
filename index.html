@@ -5482,6 +5482,14 @@ function faseDeCuenta(codigo) {
 }
 
 async function renderCostos() {
+  // Asegura el rol cargado (puede no estarlo si no se ha visitado Usuarios)
+  if (usuario_actual_rol === null) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { data: miPerfil } = await sb.from('perfiles').select('rol').eq('id', user.id).single();
+    usuario_actual_rol = miPerfil?.rol;
+  }
+  const esAdminCostos = usuario_actual_rol === 'admin';
+
   const main = document.getElementById('main-content');
   main.innerHTML = `
     <div class="module-header">
@@ -5491,13 +5499,14 @@ async function renderCostos() {
       <button id="costos-tab-obras" onclick="cambiarTabCostos('obras')">Obras</button>
       <button id="costos-tab-registro" onclick="cambiarTabCostos('registro')">Registro de costos</button>
       <button id="costos-tab-reportes" onclick="cambiarTabCostos('reportes')">Reportes</button>
+      ${esAdminCostos ? '<button id="costos-tab-plan" onclick="cambiarTabCostos(\'plan\')">Plan de cuentas</button>' : ''}
     </div>
     <div id="costos-contenido">Cargando...</div>
   `;
 
   // Cargas base compartidas por las tres pestañas
   const [cuentasRes, obrasRes, provRes, contRes] = await Promise.all([
-    plan_cuentas_cache.length ? Promise.resolve({ data: plan_cuentas_cache }) : sb.from('plan_cuentas').select('*').eq('activo', true).order('codigo'),
+    plan_cuentas_cache.length ? Promise.resolve({ data: plan_cuentas_cache }) : sb.from('plan_cuentas').select('*').order('codigo'),
     sb.from('obras').select('*, contratos(numero)').order('codigo'),
     proveedores_cache.length ? Promise.resolve({ data: proveedores_cache }) : sb.from('proveedores').select('*'),
     contratos_cache.length ? Promise.resolve({ data: contratos_cache }) : sb.from('contratos').select('*, clientes(razon_social)')
@@ -5512,12 +5521,13 @@ async function renderCostos() {
 
 function cambiarTabCostos(tab) {
   costos_tab = tab;
-  ['obras', 'registro', 'reportes'].forEach(t => {
+  ['obras', 'registro', 'reportes', 'plan'].forEach(t => {
     const btn = document.getElementById('costos-tab-' + t);
     if (btn) btn.classList.toggle('active', t === tab);
   });
   if (tab === 'obras') pintarTabObras();
   else if (tab === 'registro') pintarTabRegistroCostos();
+  else if (tab === 'plan') pintarTabPlanCuentas();
   else pintarTabReportesCostos();
 }
 
@@ -5743,6 +5753,156 @@ async function borrarRubro(id) {
   pintarTablaRubros();
 }
 
+// ------------------- Pestaña: PLAN DE CUENTAS (admin) -------------------
+
+function pintarTabPlanCuentas() {
+  const cont = document.getElementById('costos-contenido');
+  if (usuario_actual_rol !== 'admin') {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Solo un administrador puede gestionar el plan de cuentas.</p>';
+    return;
+  }
+  cont.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+      <button class="btn" onclick="abrirModalCuenta()">+ Nueva cuenta</button>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr><th>C\u00f3digo</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody>
+        ${plan_cuentas_cache.map(c => `
+          <tr style="${!c.activo ? 'opacity:0.5;' : ''}">
+            <td style="padding-left:${14 + (c.nivel - 1) * 16}px;font-family:monospace;">${escapeHtml(c.codigo)}</td>
+            <td>${c.nivel <= 2 ? '<strong>' + escapeHtml(c.nombre) + '</strong>' : escapeHtml(c.nombre)}</td>
+            <td><span class="badge ${c.imputable ? 'activo' : 'inactivo'}">${c.imputable ? 'Imputable' : 'Agrupadora'}</span></td>
+            <td><span class="badge ${c.activo ? 'activo' : 'inactivo'}">${c.activo ? 'Activa' : 'Inactiva'}</span></td>
+            <td class="row-actions">
+              <a onclick="abrirModalCuenta('${c.id}')">Editar</a>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    <p style="font-size:12px;color:var(--color-text-muted);margin-top:8px;">
+      Solo las cuentas <strong>imputables</strong> y activas aparecen al registrar costos. Las agrupadoras organizan la jerarqu\u00eda.
+      Las cuentas nuevas heredan su fase (Materiales, Mano de obra, etc.) del prefijo de su c\u00f3digo.
+    </p>
+  `;
+}
+
+function abrirModalCuenta(id) {
+  const cuenta = id ? plan_cuentas_cache.find(c => c.id === id) : null;
+  const posiblesPadres = plan_cuentas_cache.filter(c => c.activo && c.nivel < 4);
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>${cuenta ? 'Editar cuenta ' + escapeHtml(cuenta.codigo) : 'Nueva cuenta'}</h3>
+
+        ${cuenta ? `
+          <input type="hidden" id="cuenta-edit-id" value="${cuenta.id}">
+          <label>C\u00f3digo</label>
+          <input type="text" value="${escapeHtml(cuenta.codigo)}" disabled>
+          <p style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">El c\u00f3digo no se puede cambiar porque los costos ya registrados dependen de \u00e9l para su clasificaci\u00f3n por fase.</p>
+        ` : `
+          <input type="hidden" id="cuenta-edit-id" value="">
+          <label>Cuenta padre</label>
+          <select id="cuenta-padre" onchange="sugerirCodigoCuenta()">
+            <option value="">Selecciona la cuenta padre...</option>
+            ${posiblesPadres.map(c => '<option value="' + c.codigo + '">' + c.codigo + ' \u2014 ' + escapeHtml(c.nombre) + '</option>').join('')}
+          </select>
+          <label>C\u00f3digo de la nueva cuenta</label>
+          <input type="text" id="cuenta-codigo" placeholder="Se sugiere al elegir el padre">
+        `}
+
+        <label>Nombre</label>
+        <input type="text" id="cuenta-nombre" value="${escapeHtml(cuenta?.nombre)}" placeholder="ej. Geosint\u00e9ticos y geomembranas">
+
+        <div class="checkbox-row">
+          <input type="checkbox" id="cuenta-imputable" ${(!cuenta || cuenta?.imputable) ? 'checked' : ''}>
+          <label for="cuenta-imputable">Imputable (recibe costos directamente)</label>
+        </div>
+
+        ${cuenta ? `
+          <div class="checkbox-row">
+            <input type="checkbox" id="cuenta-activo" ${cuenta.activo ? 'checked' : ''}>
+            <label for="cuenta-activo">Activa (visible al registrar costos)</label>
+          </div>
+        ` : ''}
+
+        <div id="cuenta-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarCuenta()">${cuenta ? 'Guardar cambios' : 'Crear cuenta'}</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function sugerirCodigoCuenta() {
+  const padreCodigo = document.getElementById('cuenta-padre').value;
+  if (!padreCodigo) return;
+  const hijos = plan_cuentas_cache.filter(c => c.padre_codigo === padreCodigo);
+  let maxNum = 0;
+  hijos.forEach(h => {
+    const sufijo = h.codigo.slice(padreCodigo.length + 1);
+    const num = parseInt(sufijo, 10);
+    if (!isNaN(num) && num !== 99 && num > maxNum) maxNum = num;
+  });
+  document.getElementById('cuenta-codigo').value = padreCodigo + '.' + String(maxNum + 1).padStart(2, '0');
+}
+
+async function guardarCuenta() {
+  const editId = document.getElementById('cuenta-edit-id').value;
+  const nombre = document.getElementById('cuenta-nombre').value.trim();
+  const imputable = document.getElementById('cuenta-imputable').checked;
+
+  if (!nombre) {
+    showMsg('cuenta-msg', 'El nombre es obligatorio.', 'error');
+    return;
+  }
+
+  let query;
+  if (editId) {
+    const activo = document.getElementById('cuenta-activo').checked;
+    query = sb.from('plan_cuentas').update({ nombre, imputable, activo }).eq('id', editId);
+  } else {
+    const padreCodigo = document.getElementById('cuenta-padre').value;
+    const codigo = document.getElementById('cuenta-codigo').value.trim();
+    if (!padreCodigo) {
+      showMsg('cuenta-msg', 'Selecciona la cuenta padre.', 'error');
+      return;
+    }
+    if (!codigo || !codigo.startsWith(padreCodigo + '.')) {
+      showMsg('cuenta-msg', 'El c\u00f3digo debe empezar con "' + padreCodigo + '." para mantener la jerarqu\u00eda y su fase.', 'error');
+      return;
+    }
+    const padre = plan_cuentas_cache.find(c => c.codigo === padreCodigo);
+    query = sb.from('plan_cuentas').insert({
+      codigo,
+      nombre,
+      nivel: (padre?.nivel || 1) + 1,
+      padre_codigo: padreCodigo,
+      imputable
+    });
+  }
+
+  const { error } = await query;
+  if (error) {
+    const msg = error.message.includes('duplicate') || error.message.includes('unique')
+      ? 'Ya existe una cuenta con ese c\u00f3digo.'
+      : error.message;
+    showMsg('cuenta-msg', 'Error: ' + msg, 'error');
+    return;
+  }
+
+  const { data } = await sb.from('plan_cuentas').select('*').order('codigo');
+  plan_cuentas_cache = data || [];
+  closeModal();
+  pintarTabPlanCuentas();
+}
+
 // --------------------- Pestaña: REGISTRO DE COSTOS ---------------------
 
 async function pintarTabRegistroCostos() {
@@ -5859,7 +6019,7 @@ async function abrirModalCosto(id) {
     .order('created_at', { ascending: false })
     .limit(100);
 
-  const cuentasImputables = plan_cuentas_cache.filter(c => c.imputable);
+  const cuentasImputables = plan_cuentas_cache.filter(c => c.imputable && c.activo);
   const fasesAgrupadas = {};
   cuentasImputables.forEach(c => {
     const fase = faseDeCuenta(c.codigo);
