@@ -1029,6 +1029,7 @@
         <a href="#" data-module="contratos">Contratos</a>
         <a href="#" data-module="correspondencia">Correspondencia</a>
         <a href="#" data-module="cartera">Cartera</a>
+        <a href="#" data-module="costos">Costos de Obra</a>
         <a href="#" data-module="tesoreria">Tesorería</a>
         <a href="#" data-module="usuarios">Usuarios</a>
         <a href="#" data-module="chat">Chat</a>
@@ -1261,6 +1262,7 @@ function renderModule(modulo) {
     contratos: renderContratos,
     correspondencia: renderCorrespondencia,
     cartera: renderCartera,
+    costos: renderCostos,
     tesoreria: renderTesoreria,
     chat: renderChat,
     usuarios: renderUsuarios
@@ -5452,6 +5454,676 @@ function renderAdjuntosCorrespondencia(correspondenciaId) {
   renderAdjuntos('correspondencia-adjuntos', 'correspondencia_extra', correspondenciaId);
 }
 
+
+// =====================================================================
+// MÓDULO: COSTOS DE OBRA
+// Plan de cuentas + obras + rubros + registro de costos + reportes
+// =====================================================================
+let costos_tab = 'obras';
+let plan_cuentas_cache = [];
+let obras_cache = [];
+let rubros_obra_cache = [];   // rubros de la obra seleccionada en el modal de costo
+let obra_costos_cache = [];
+let modal_obra_id = null;
+let modal_costo_id = null;
+let costos_filtros = { obra_id: '', fase: '', proveedor_id: '', fecha_desde: '', fecha_hasta: '' };
+
+const FASES_COSTO = ['Materiales', 'Mano de obra', 'Equipos', 'Transporte', 'Subcontratos', 'Indirectos'];
+
+function faseDeCuenta(codigo) {
+  if (!codigo) return 'Otros';
+  if (codigo.startsWith('5.1.01')) return 'Materiales';
+  if (codigo.startsWith('5.1.02')) return 'Mano de obra';
+  if (codigo.startsWith('5.1.03')) return 'Equipos';
+  if (codigo.startsWith('5.1.04')) return 'Transporte';
+  if (codigo.startsWith('5.1.05')) return 'Subcontratos';
+  if (codigo.startsWith('5.2')) return 'Indirectos';
+  return 'Otros';
+}
+
+async function renderCostos() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="module-header">
+      <h2>Costos de Obra</h2>
+    </div>
+    <div class="subtabs-bar">
+      <button id="costos-tab-obras" onclick="cambiarTabCostos('obras')">Obras</button>
+      <button id="costos-tab-registro" onclick="cambiarTabCostos('registro')">Registro de costos</button>
+      <button id="costos-tab-reportes" onclick="cambiarTabCostos('reportes')">Reportes</button>
+    </div>
+    <div id="costos-contenido">Cargando...</div>
+  `;
+
+  // Cargas base compartidas por las tres pestañas
+  const [cuentasRes, obrasRes, provRes, contRes] = await Promise.all([
+    plan_cuentas_cache.length ? Promise.resolve({ data: plan_cuentas_cache }) : sb.from('plan_cuentas').select('*').eq('activo', true).order('codigo'),
+    sb.from('obras').select('*, contratos(numero)').order('codigo'),
+    proveedores_cache.length ? Promise.resolve({ data: proveedores_cache }) : sb.from('proveedores').select('*'),
+    contratos_cache.length ? Promise.resolve({ data: contratos_cache }) : sb.from('contratos').select('*, clientes(razon_social)')
+  ]);
+  plan_cuentas_cache = cuentasRes.data || [];
+  obras_cache = obrasRes.data || [];
+  proveedores_cache = provRes.data || [];
+  contratos_cache = contRes.data || [];
+
+  cambiarTabCostos(costos_tab);
+}
+
+function cambiarTabCostos(tab) {
+  costos_tab = tab;
+  ['obras', 'registro', 'reportes'].forEach(t => {
+    const btn = document.getElementById('costos-tab-' + t);
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+  if (tab === 'obras') pintarTabObras();
+  else if (tab === 'registro') pintarTabRegistroCostos();
+  else pintarTabReportesCostos();
+}
+
+// ------------------------- Pestaña: OBRAS -------------------------
+
+function pintarTabObras() {
+  const cont = document.getElementById('costos-contenido');
+  cont.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+      <button class="btn" onclick="abrirModalObra()">+ Nueva obra</button>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr><th>Código</th><th>Nombre</th><th>Contrato</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody id="obras-tbody">
+        ${obras_cache.length ? obras_cache.map(o => `
+          <tr>
+            <td>${escapeHtml(o.codigo)}</td>
+            <td>${escapeHtml(o.nombre)}</td>
+            <td>${o.contratos ? 'N.\u00b0 ' + escapeHtml(o.contratos.numero) : '\u2014'}</td>
+            <td><span class="badge ${o.estado === 'activa' ? 'activo' : 'inactivo'}">${o.estado === 'activa' ? 'Activa' : 'Cerrada'}</span></td>
+            <td class="row-actions">
+              <a onclick="abrirModalObra('${o.id}')">Editar</a>
+              <a onclick="abrirModalRubros('${o.id}')">Rubros</a>
+            </td>
+          </tr>
+        `).join('') : '<tr><td colspan="5">No hay obras registradas.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+}
+
+function abrirModalObra(id) {
+  modal_obra_id = id || null;
+  const obra = id ? obras_cache.find(o => o.id === id) : null;
+  const siguienteCodigo = 'OB-' + String(obras_cache.length + 1).padStart(3, '0');
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>${obra ? 'Editar obra' : 'Nueva obra'}</h3>
+        <div class="field-row">
+          <div>
+            <label>Código</label>
+            <input type="text" id="obra-codigo" value="${escapeHtml(obra?.codigo) || siguienteCodigo}">
+          </div>
+          <div>
+            <label>Estado</label>
+            <select id="obra-estado">
+              <option value="activa" ${(!obra || obra?.estado === 'activa') ? 'selected' : ''}>Activa</option>
+              <option value="cerrada" ${obra?.estado === 'cerrada' ? 'selected' : ''}>Cerrada</option>
+            </select>
+          </div>
+        </div>
+        <label>Nombre de la obra</label>
+        <input type="text" id="obra-nombre" value="${escapeHtml(obra?.nombre)}" placeholder="ej. Puente sobre el río Bulubulu">
+        <label>Contrato relacionado (opcional)</label>
+        <select id="obra-contrato">
+          <option value="">Sin contrato</option>
+          ${contratos_cache.map(c => '<option value="' + c.id + '" ' + (obra?.contrato_id === c.id ? 'selected' : '') + '>N.\u00b0 ' + escapeHtml(c.numero) + ' \u2014 ' + escapeHtml(c.clientes?.razon_social) + '</option>').join('')}
+        </select>
+        <div id="obra-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarObra()">${obra ? 'Guardar cambios' : 'Crear obra'}</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarObra() {
+  const payload = {
+    codigo: document.getElementById('obra-codigo').value.trim(),
+    nombre: document.getElementById('obra-nombre').value.trim(),
+    contrato_id: document.getElementById('obra-contrato').value || null,
+    estado: document.getElementById('obra-estado').value
+  };
+  if (!payload.codigo || !payload.nombre) {
+    showMsg('obra-msg', 'C\u00f3digo y nombre son obligatorios.', 'error');
+    return;
+  }
+  const query = modal_obra_id
+    ? sb.from('obras').update(payload).eq('id', modal_obra_id)
+    : sb.from('obras').insert(payload);
+  const { error } = await query;
+  if (error) {
+    showMsg('obra-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  await renderCostos();
+}
+
+// ------------------------- Rubros de una obra -------------------------
+
+async function abrirModalRubros(obraId) {
+  modal_obra_id = obraId;
+  const obra = obras_cache.find(o => o.id === obraId);
+  const { data: rubros } = await sb.from('obra_rubros').select('*').eq('obra_id', obraId).order('codigo');
+  rubros_obra_cache = rubros || [];
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card extra-wide">
+        <h3>Rubros \u2014 ${escapeHtml(obra?.codigo)} ${escapeHtml(obra?.nombre)}</h3>
+
+        <div class="field-row">
+          <div><label>C\u00f3digo</label><input type="text" id="rubro-codigo" placeholder="ej. 501001"></div>
+          <div><label>Descripci\u00f3n</label><input type="text" id="rubro-descripcion" placeholder="ej. Hormig\u00f3n f'c=280 kg/cm2"></div>
+        </div>
+        <div class="field-row">
+          <div><label>Unidad</label><input type="text" id="rubro-unidad" placeholder="ej. m3"></div>
+          <div><label>Cantidad contractual</label><input type="number" step="0.0001" id="rubro-cantidad" placeholder="0"></div>
+        </div>
+        <div class="field-row">
+          <div><label>Precio unitario (APU)</label><input type="number" step="0.0001" id="rubro-precio" placeholder="0.00"></div>
+          <div><label>Cantidad ejecutada (avance)</label><input type="number" step="0.0001" id="rubro-ejecutada" placeholder="0"></div>
+        </div>
+        <input type="hidden" id="rubro-edit-id" value="">
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button class="btn" onclick="guardarRubro()">Agregar / actualizar rubro</button>
+          <button class="btn btn-secondary" onclick="limpiarFormularioRubro()">Limpiar</button>
+        </div>
+
+        <div id="rubro-msg"></div>
+
+        <table class="data-table" style="margin-top:14px;">
+          <thead>
+            <tr><th>C\u00f3digo</th><th>Descripci\u00f3n</th><th>Unidad</th><th>Cant. contractual</th><th>P. unitario</th><th>Cant. ejecutada</th><th></th></tr>
+          </thead>
+          <tbody id="rubros-tbody"></tbody>
+        </table>
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  `;
+  pintarTablaRubros();
+}
+
+function pintarTablaRubros() {
+  const tbody = document.getElementById('rubros-tbody');
+  if (!rubros_obra_cache.length) {
+    tbody.innerHTML = '<tr><td colspan="7">Sin rubros a\u00fan. Agrega el primero arriba.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rubros_obra_cache.map(r => `
+    <tr>
+      <td>${escapeHtml(r.codigo)}</td>
+      <td>${escapeHtml(r.descripcion)}</td>
+      <td>${escapeHtml(r.unidad) || '\u2014'}</td>
+      <td>${Number(r.cantidad_contractual || 0)}</td>
+      <td>$${formatearMoneda(r.precio_unitario)}</td>
+      <td>${Number(r.cantidad_ejecutada || 0)}</td>
+      <td class="row-actions">
+        <a onclick="editarRubro('${r.id}')">Editar</a>
+        <a style="color:var(--color-danger);" onclick="borrarRubro('${r.id}')">Eliminar</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function editarRubro(id) {
+  const r = rubros_obra_cache.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('rubro-edit-id').value = r.id;
+  document.getElementById('rubro-codigo').value = r.codigo;
+  document.getElementById('rubro-descripcion').value = r.descripcion;
+  document.getElementById('rubro-unidad').value = r.unidad || '';
+  document.getElementById('rubro-cantidad').value = r.cantidad_contractual || 0;
+  document.getElementById('rubro-precio').value = r.precio_unitario || 0;
+  document.getElementById('rubro-ejecutada').value = r.cantidad_ejecutada || 0;
+}
+
+function limpiarFormularioRubro() {
+  ['rubro-edit-id', 'rubro-codigo', 'rubro-descripcion', 'rubro-unidad', 'rubro-cantidad', 'rubro-precio', 'rubro-ejecutada'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+}
+
+async function guardarRubro() {
+  const editId = document.getElementById('rubro-edit-id').value;
+  const payload = {
+    obra_id: modal_obra_id,
+    codigo: document.getElementById('rubro-codigo').value.trim(),
+    descripcion: document.getElementById('rubro-descripcion').value.trim(),
+    unidad: document.getElementById('rubro-unidad').value.trim() || null,
+    cantidad_contractual: parseFloat(document.getElementById('rubro-cantidad').value) || 0,
+    precio_unitario: parseFloat(document.getElementById('rubro-precio').value) || 0,
+    cantidad_ejecutada: parseFloat(document.getElementById('rubro-ejecutada').value) || 0
+  };
+  if (!payload.codigo || !payload.descripcion) {
+    showMsg('rubro-msg', 'C\u00f3digo y descripci\u00f3n son obligatorios.', 'error');
+    return;
+  }
+  const query = editId
+    ? sb.from('obra_rubros').update(payload).eq('id', editId)
+    : sb.from('obra_rubros').insert(payload);
+  const { error } = await query;
+  if (error) {
+    showMsg('rubro-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  const { data: rubros } = await sb.from('obra_rubros').select('*').eq('obra_id', modal_obra_id).order('codigo');
+  rubros_obra_cache = rubros || [];
+  limpiarFormularioRubro();
+  clearMsg('rubro-msg');
+  pintarTablaRubros();
+}
+
+async function borrarRubro(id) {
+  if (!confirm('\u00bfEliminar este rubro? Los costos ya codificados a \u00e9l quedar\u00e1n sin rubro.')) return;
+  const { error } = await sb.from('obra_rubros').delete().eq('id', id);
+  if (error) {
+    showMsg('rubro-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  rubros_obra_cache = rubros_obra_cache.filter(r => r.id !== id);
+  pintarTablaRubros();
+}
+
+// --------------------- Pestaña: REGISTRO DE COSTOS ---------------------
+
+async function pintarTabRegistroCostos() {
+  const cont = document.getElementById('costos-contenido');
+  cont.innerHTML = `
+    <div class="correspondencia-filtros">
+      <select id="costo-filtro-obra" onchange="aplicarFiltrosCostos()">
+        <option value="">Todas las obras</option>
+        ${obras_cache.map(o => '<option value="' + o.id + '">' + escapeHtml(o.codigo) + ' \u2014 ' + escapeHtml(o.nombre) + '</option>').join('')}
+      </select>
+      <select id="costo-filtro-fase" onchange="aplicarFiltrosCostos()">
+        <option value="">Todas las fases</option>
+        ${FASES_COSTO.map(f => '<option value="' + f + '">' + f + '</option>').join('')}
+      </select>
+      <select id="costo-filtro-proveedor" onchange="aplicarFiltrosCostos()">
+        <option value="">Todos los proveedores</option>
+        ${proveedores_cache.map(p => '<option value="' + p.id + '">' + escapeHtml(p.razon_social) + '</option>').join('')}
+      </select>
+      <input type="date" id="costo-filtro-fecha-desde" onchange="aplicarFiltrosCostos()" title="Desde">
+      <input type="date" id="costo-filtro-fecha-hasta" onchange="aplicarFiltrosCostos()" title="Hasta">
+      <button class="btn btn-secondary" onclick="limpiarFiltrosCostos()">Limpiar filtros</button>
+      <button class="btn" onclick="abrirModalCosto()">+ Registrar costo</button>
+    </div>
+    <div class="resumen-cartera" id="costos-resumen"></div>
+    <table class="data-table">
+      <thead>
+        <tr><th>Fecha</th><th>Obra</th><th>Rubro</th><th>Cuenta</th><th>Fase</th><th>Proveedor</th><th>Descripci\u00f3n</th><th>Monto</th></tr>
+      </thead>
+      <tbody id="costos-tbody"><tr><td colspan="8">Cargando...</td></tr></tbody>
+    </table>
+  `;
+  await cargarCostos();
+}
+
+async function cargarCostos() {
+  const { data, error } = await sb
+    .from('obra_costos')
+    .select('*, obras(codigo, nombre), obra_rubros(codigo, descripcion), plan_cuentas(codigo, nombre), proveedores(razon_social), cartera_documentos(numero_documento)')
+    .order('fecha', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('costos-tbody').innerHTML = '<tr><td colspan="8">Error: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  obra_costos_cache = data || [];
+  pintarCostos();
+}
+
+function aplicarFiltrosCostos() {
+  costos_filtros.obra_id = document.getElementById('costo-filtro-obra').value;
+  costos_filtros.fase = document.getElementById('costo-filtro-fase').value;
+  costos_filtros.proveedor_id = document.getElementById('costo-filtro-proveedor').value;
+  costos_filtros.fecha_desde = document.getElementById('costo-filtro-fecha-desde').value;
+  costos_filtros.fecha_hasta = document.getElementById('costo-filtro-fecha-hasta').value;
+  pintarCostos();
+}
+
+function limpiarFiltrosCostos() {
+  ['costo-filtro-obra', 'costo-filtro-fase', 'costo-filtro-proveedor', 'costo-filtro-fecha-desde', 'costo-filtro-fecha-hasta'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  costos_filtros = { obra_id: '', fase: '', proveedor_id: '', fecha_desde: '', fecha_hasta: '' };
+  pintarCostos();
+}
+
+function pintarCostos() {
+  let lista = obra_costos_cache;
+  if (costos_filtros.obra_id) lista = lista.filter(c => c.obra_id === costos_filtros.obra_id);
+  if (costos_filtros.fase) lista = lista.filter(c => faseDeCuenta(c.plan_cuentas?.codigo) === costos_filtros.fase);
+  if (costos_filtros.proveedor_id) lista = lista.filter(c => c.proveedor_id === costos_filtros.proveedor_id);
+  if (costos_filtros.fecha_desde) lista = lista.filter(c => c.fecha >= costos_filtros.fecha_desde);
+  if (costos_filtros.fecha_hasta) lista = lista.filter(c => c.fecha <= costos_filtros.fecha_hasta);
+
+  const total = lista.reduce((acc, c) => acc + Number(c.monto || 0), 0);
+  document.getElementById('costos-resumen').innerHTML = `
+    <div class="resumen-card">
+      <div class="label">L\u00edneas registradas</div>
+      <div class="valor">${lista.length}</div>
+    </div>
+    <div class="resumen-card">
+      <div class="label">Total codificado</div>
+      <div class="valor">$${formatearMoneda(total)}</div>
+    </div>
+  `;
+
+  const tbody = document.getElementById('costos-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="8">No hay costos que coincidan con los filtros.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(c => `
+    <tr style="cursor:pointer;" onclick="abrirModalCosto('${c.id}')">
+      <td>${c.fecha}</td>
+      <td>${escapeHtml(c.obras?.codigo) || '\u2014'}</td>
+      <td>${c.obra_rubros ? escapeHtml(c.obra_rubros.codigo) : '\u2014'}</td>
+      <td>${escapeHtml(c.plan_cuentas?.codigo) || '\u2014'}</td>
+      <td>${faseDeCuenta(c.plan_cuentas?.codigo)}</td>
+      <td>${escapeHtml(c.proveedores?.razon_social) || '\u2014'}</td>
+      <td>${escapeHtml(c.descripcion) || (c.cartera_documentos ? 'Doc. ' + escapeHtml(c.cartera_documentos.numero_documento) : '\u2014')}</td>
+      <td>$${formatearMoneda(c.monto)}</td>
+    </tr>
+  `).join('');
+}
+
+async function abrirModalCosto(id) {
+  modal_costo_id = id || null;
+  const costo = id ? obra_costos_cache.find(c => c.id === id) : null;
+
+  // Documentos CxP disponibles para vincular
+  const { data: docsCxP } = await sb
+    .from('cartera_documentos')
+    .select('id, numero_documento, monto_original, proveedores(razon_social)')
+    .eq('tipo', 'por_pagar')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  const cuentasImputables = plan_cuentas_cache.filter(c => c.imputable);
+  const fasesAgrupadas = {};
+  cuentasImputables.forEach(c => {
+    const fase = faseDeCuenta(c.codigo);
+    if (!fasesAgrupadas[fase]) fasesAgrupadas[fase] = [];
+    fasesAgrupadas[fase].push(c);
+  });
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card wide">
+        <h3>${costo ? 'Editar costo' : 'Registrar costo'}</h3>
+
+        <div class="field-row">
+          <div>
+            <label>Obra</label>
+            <select id="costo-obra" onchange="onCambioObraCosto()">
+              <option value="">Selecciona una obra...</option>
+              ${obras_cache.map(o => '<option value="' + o.id + '" ' + (costo?.obra_id === o.id ? 'selected' : '') + '>' + escapeHtml(o.codigo) + ' \u2014 ' + escapeHtml(o.nombre) + '</option>').join('')}
+            </select>
+          </div>
+          <div>
+            <label>Rubro</label>
+            <select id="costo-rubro">
+              <option value="">Selecciona la obra primero...</option>
+            </select>
+          </div>
+        </div>
+
+        <label>Cuenta (tipo de recurso)</label>
+        <select id="costo-cuenta">
+          <option value="">Selecciona una cuenta...</option>
+          ${Object.entries(fasesAgrupadas).map(([fase, cuentas]) =>
+            '<optgroup label="' + fase + '">' +
+            cuentas.map(c => '<option value="' + c.id + '" ' + (costo?.cuenta_id === c.id ? 'selected' : '') + '>' + c.codigo + ' \u2014 ' + escapeHtml(c.nombre) + '</option>').join('') +
+            '</optgroup>'
+          ).join('')}
+        </select>
+
+        <div class="field-row">
+          <div>
+            <label>Proveedor (opcional)</label>
+            <select id="costo-proveedor">
+              <option value="">Sin proveedor</option>
+              ${proveedores_cache.map(p => '<option value="' + p.id + '" ' + (costo?.proveedor_id === p.id ? 'selected' : '') + '>' + escapeHtml(p.razon_social) + '</option>').join('')}
+            </select>
+          </div>
+          <div>
+            <label>Documento de Cartera CxP (opcional)</label>
+            <select id="costo-documento">
+              <option value="">Sin documento vinculado</option>
+              ${(docsCxP || []).map(d => '<option value="' + d.id + '" ' + (costo?.cartera_documento_id === d.id ? 'selected' : '') + '>' + escapeHtml(d.numero_documento) + ' \u2014 ' + escapeHtml(d.proveedores?.razon_social || '') + ' ($' + formatearMoneda(d.monto_original) + ')</option>').join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div>
+            <label>Fecha</label>
+            <input type="date" id="costo-fecha" value="${costo?.fecha || new Date().toISOString().slice(0, 10)}">
+          </div>
+          <div>
+            <label>Monto</label>
+            <input type="number" step="0.01" id="costo-monto" value="${costo?.monto ?? ''}" placeholder="0.00">
+          </div>
+        </div>
+
+        <label>Descripci\u00f3n (opcional)</label>
+        <input type="text" id="costo-descripcion" value="${escapeHtml(costo?.descripcion)}" placeholder="ej. Factura 001-002-123 cemento 100 sacos">
+
+        <div id="costo-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          ${costo ? '<button class="btn btn-secondary" style="color:var(--color-danger);" onclick="borrarCosto(\'' + costo.id + '\')">Eliminar</button>' : ''}
+          ${!costo ? '<button class="btn btn-secondary" onclick="guardarCosto(true)">Guardar y agregar otro</button>' : ''}
+          <button class="btn" onclick="guardarCosto(false)">${costo ? 'Guardar cambios' : 'Guardar'}</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (costo?.obra_id) {
+    await onCambioObraCosto(costo.rubro_id);
+  }
+}
+
+async function onCambioObraCosto(rubroSeleccionado) {
+  const obraId = document.getElementById('costo-obra').value;
+  const selectRubro = document.getElementById('costo-rubro');
+  if (!obraId) {
+    selectRubro.innerHTML = '<option value="">Selecciona la obra primero...</option>';
+    return;
+  }
+  const { data: rubros } = await sb.from('obra_rubros').select('*').eq('obra_id', obraId).order('codigo');
+  selectRubro.innerHTML = '<option value="">Sin rubro (costo general de obra)</option>' +
+    (rubros || []).map(r => '<option value="' + r.id + '" ' + (rubroSeleccionado === r.id ? 'selected' : '') + '>' + escapeHtml(r.codigo) + ' \u2014 ' + escapeHtml(r.descripcion) + '</option>').join('');
+}
+
+async function guardarCosto(agregarOtro) {
+  const payload = {
+    obra_id: document.getElementById('costo-obra').value || null,
+    rubro_id: document.getElementById('costo-rubro').value || null,
+    cuenta_id: document.getElementById('costo-cuenta').value || null,
+    proveedor_id: document.getElementById('costo-proveedor').value || null,
+    cartera_documento_id: document.getElementById('costo-documento').value || null,
+    fecha: document.getElementById('costo-fecha').value,
+    monto: parseFloat(document.getElementById('costo-monto').value),
+    descripcion: document.getElementById('costo-descripcion').value.trim() || null
+  };
+
+  if (!payload.obra_id) { showMsg('costo-msg', 'Selecciona una obra.', 'error'); return; }
+  if (!payload.cuenta_id) { showMsg('costo-msg', 'Selecciona una cuenta.', 'error'); return; }
+  if (!payload.fecha) { showMsg('costo-msg', 'La fecha es obligatoria.', 'error'); return; }
+  if (!payload.monto || payload.monto <= 0) { showMsg('costo-msg', 'Ingresa un monto v\u00e1lido mayor a cero.', 'error'); return; }
+
+  if (!modal_costo_id) {
+    const { data: { user } } = await sb.auth.getUser();
+    payload.creado_por = user.id;
+  }
+
+  const query = modal_costo_id
+    ? sb.from('obra_costos').update(payload).eq('id', modal_costo_id)
+    : sb.from('obra_costos').insert(payload);
+  const { error } = await query;
+  if (error) {
+    showMsg('costo-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+
+  if (agregarOtro) {
+    showMsg('costo-msg', 'Costo guardado. Puedes registrar otro.', 'success');
+    document.getElementById('costo-monto').value = '';
+    document.getElementById('costo-descripcion').value = '';
+    await cargarCostos();
+  } else {
+    closeModal();
+    await cargarCostos();
+  }
+}
+
+async function borrarCosto(id) {
+  if (!confirm('\u00bfEliminar esta l\u00ednea de costo?')) return;
+  const { error } = await sb.from('obra_costos').delete().eq('id', id);
+  if (error) {
+    showMsg('costo-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  await cargarCostos();
+}
+
+// ----------------------- Pestaña: REPORTES -----------------------
+
+function pintarTabReportesCostos() {
+  const cont = document.getElementById('costos-contenido');
+  cont.innerHTML = `
+    <div class="correspondencia-filtros">
+      <select id="reporte-obra" onchange="generarReporteCostos()">
+        <option value="">Selecciona una obra...</option>
+        ${obras_cache.map(o => '<option value="' + o.id + '">' + escapeHtml(o.codigo) + ' \u2014 ' + escapeHtml(o.nombre) + '</option>').join('')}
+      </select>
+    </div>
+    <div id="reporte-contenido">
+      <p style="color:var(--color-text-muted);font-size:13px;">Selecciona una obra para ver sus reportes de costos.</p>
+    </div>
+  `;
+}
+
+async function generarReporteCostos() {
+  const obraId = document.getElementById('reporte-obra').value;
+  const cont = document.getElementById('reporte-contenido');
+  if (!obraId) {
+    cont.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Selecciona una obra para ver sus reportes de costos.</p>';
+    return;
+  }
+  cont.innerHTML = 'Generando reporte...';
+
+  const [costosRes, rubrosRes] = await Promise.all([
+    sb.from('obra_costos').select('*, plan_cuentas(codigo, nombre), obra_rubros(id, codigo, descripcion)').eq('obra_id', obraId),
+    sb.from('obra_rubros').select('*').eq('obra_id', obraId).order('codigo')
+  ]);
+  const costos = costosRes.data || [];
+  const rubros = rubrosRes.data || [];
+
+  // --- Resumen por fase (toda la obra) ---
+  const porFase = {};
+  FASES_COSTO.forEach(f => porFase[f] = 0);
+  let totalObra = 0;
+  costos.forEach(c => {
+    const fase = faseDeCuenta(c.plan_cuentas?.codigo);
+    porFase[fase] = (porFase[fase] || 0) + Number(c.monto || 0);
+    totalObra += Number(c.monto || 0);
+  });
+
+  // --- Matriz rubro x fase ---
+  const matriz = {}; // rubro_id -> { fase -> monto, total }
+  let costosSinRubro = 0;
+  costos.forEach(c => {
+    const key = c.rubro_id || '_sin_rubro';
+    if (!matriz[key]) { matriz[key] = { total: 0 }; FASES_COSTO.forEach(f => matriz[key][f] = 0); }
+    const fase = faseDeCuenta(c.plan_cuentas?.codigo);
+    matriz[key][fase] = (matriz[key][fase] || 0) + Number(c.monto || 0);
+    matriz[key].total += Number(c.monto || 0);
+    if (!c.rubro_id) costosSinRubro += Number(c.monto || 0);
+  });
+
+  const filasMatriz = rubros.map(r => {
+    const fila = matriz[r.id] || Object.fromEntries([...FASES_COSTO.map(f => [f, 0]), ['total', 0]]);
+    const presupuesto = Number(r.cantidad_contractual || 0) * Number(r.precio_unitario || 0);
+    const costoUnitarioReal = Number(r.cantidad_ejecutada || 0) > 0 ? fila.total / Number(r.cantidad_ejecutada) : null;
+    return `
+      <tr>
+        <td>${escapeHtml(r.codigo)}</td>
+        <td>${escapeHtml(r.descripcion)}</td>
+        ${FASES_COSTO.map(f => '<td>' + (fila[f] ? '$' + formatearMoneda(fila[f]) : '\u2014') + '</td>').join('')}
+        <td><strong>$${formatearMoneda(fila.total)}</strong></td>
+        <td>$${formatearMoneda(presupuesto)}</td>
+        <td>${presupuesto > 0 ? ((fila.total / presupuesto) * 100).toFixed(1) + '%' : '\u2014'}</td>
+        <td>${costoUnitarioReal !== null ? '$' + formatearMoneda(costoUnitarioReal) : '\u2014'}</td>
+        <td>$${formatearMoneda(r.precio_unitario)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  cont.innerHTML = `
+    <h3 style="font-size:15px;margin-bottom:10px;">Resumen por fase</h3>
+    <div class="resumen-cartera">
+      ${FASES_COSTO.map(f => `
+        <div class="resumen-card">
+          <div class="label">${f}</div>
+          <div class="valor" style="font-size:18px;">$${formatearMoneda(porFase[f])}</div>
+        </div>
+      `).join('')}
+      <div class="resumen-card">
+        <div class="label">TOTAL OBRA</div>
+        <div class="valor" style="font-size:18px;color:var(--color-primary);">$${formatearMoneda(totalObra)}</div>
+      </div>
+    </div>
+
+    <h3 style="font-size:15px;margin:20px 0 10px;">Costo por rubro y fase</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>C\u00f3digo</th><th>Rubro</th>
+          ${FASES_COSTO.map(f => '<th>' + f + '</th>').join('')}
+          <th>Total real</th><th>Presupuesto</th><th>% consumido</th><th>C. unit. real</th><th>P. unit. contrato</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filasMatriz || '<tr><td colspan="13">Esta obra no tiene rubros definidos.</td></tr>'}
+        ${costosSinRubro > 0 ? `
+          <tr style="background:var(--color-bg);">
+            <td>\u2014</td><td><em>Costos generales (sin rubro)</em></td>
+            ${FASES_COSTO.map(f => '<td>' + (matriz['_sin_rubro'] && matriz['_sin_rubro'][f] ? '$' + formatearMoneda(matriz['_sin_rubro'][f]) : '\u2014') + '</td>').join('')}
+            <td><strong>$${formatearMoneda(costosSinRubro)}</strong></td>
+            <td>\u2014</td><td>\u2014</td><td>\u2014</td><td>\u2014</td>
+          </tr>
+        ` : ''}
+      </tbody>
+    </table>
+    <p style="font-size:12px;color:var(--color-text-muted);margin-top:8px;">
+      El costo unitario real se calcula como total gastado \u00f7 cantidad ejecutada (actualiza el avance de cada rubro en la pesta\u00f1a Obras > Rubros).
+    </p>
+  `;
+}
 
 // =====================================================================
 // DASHBOARD DE BIENVENIDA (pantalla de inicio)
