@@ -5468,7 +5468,7 @@ let modal_obra_id = null;
 let modal_costo_id = null;
 let costos_filtros = { obra_id: '', fase: '', proveedor_id: '', fecha_desde: '', fecha_hasta: '' };
 
-const FASES_COSTO = ['Materiales', 'Mano de obra', 'Equipos', 'Transporte', 'Subcontratos', 'Indirectos'];
+const FASES_COSTO = ['Materiales', 'Mano de obra', 'Equipos', 'Transporte', 'Subcontratos', 'Indirectos', 'Fiscalizaci\u00f3n', 'Dise\u00f1o', 'Gastos'];
 
 function faseDeCuenta(codigo) {
   if (!codigo) return 'Otros';
@@ -5478,6 +5478,9 @@ function faseDeCuenta(codigo) {
   if (codigo.startsWith('5.1.04')) return 'Transporte';
   if (codigo.startsWith('5.1.05')) return 'Subcontratos';
   if (codigo.startsWith('5.2')) return 'Indirectos';
+  if (codigo.startsWith('5.3')) return 'Fiscalizaci\u00f3n';
+  if (codigo.startsWith('5.4')) return 'Dise\u00f1o';
+  if (codigo.startsWith('6')) return 'Gastos';
   return 'Otros';
 }
 
@@ -6213,6 +6216,14 @@ async function generarReporteCostos() {
     totalObra += Number(c.monto || 0);
   });
 
+  // Solo mostramos las fases que tienen movimiento (una obra de
+  // construcción no necesita ver columnas vacías de Fiscalización o
+  // Diseño, y viceversa). Si no hay costos aún, mostramos las 6 fases
+  // clásicas de construcción.
+  const fasesReporte = FASES_COSTO.filter(f => porFase[f] > 0).length
+    ? FASES_COSTO.filter(f => porFase[f] > 0)
+    : FASES_COSTO.slice(0, 6);
+
   // --- Matriz rubro x fase ---
   const matriz = {}; // rubro_id -> { fase -> monto, total }
   let costosSinRubro = 0;
@@ -6233,7 +6244,7 @@ async function generarReporteCostos() {
       <tr>
         <td>${escapeHtml(r.codigo)}</td>
         <td>${escapeHtml(r.descripcion)}</td>
-        ${FASES_COSTO.map(f => '<td>' + (fila[f] ? '$' + formatearMoneda(fila[f]) : '\u2014') + '</td>').join('')}
+        ${fasesReporte.map(f => '<td>' + (fila[f] ? '$' + formatearMoneda(fila[f]) : '\u2014') + '</td>').join('')}
         <td><strong>$${formatearMoneda(fila.total)}</strong></td>
         <td>$${formatearMoneda(presupuesto)}</td>
         <td>${presupuesto > 0 ? ((fila.total / presupuesto) * 100).toFixed(1) + '%' : '\u2014'}</td>
@@ -6246,7 +6257,7 @@ async function generarReporteCostos() {
   cont.innerHTML = `
     <h3 style="font-size:15px;margin-bottom:10px;">Resumen por fase</h3>
     <div class="resumen-cartera">
-      ${FASES_COSTO.map(f => `
+      ${fasesReporte.map(f => `
         <div class="resumen-card">
           <div class="label">${f}</div>
           <div class="valor" style="font-size:18px;">$${formatearMoneda(porFase[f])}</div>
@@ -6263,16 +6274,16 @@ async function generarReporteCostos() {
       <thead>
         <tr>
           <th>C\u00f3digo</th><th>Rubro</th>
-          ${FASES_COSTO.map(f => '<th>' + f + '</th>').join('')}
+          ${fasesReporte.map(f => '<th>' + f + '</th>').join('')}
           <th>Total real</th><th>Presupuesto</th><th>% consumido</th><th>C. unit. real</th><th>P. unit. contrato</th>
         </tr>
       </thead>
       <tbody>
-        ${filasMatriz || '<tr><td colspan="13">Esta obra no tiene rubros definidos.</td></tr>'}
+        ${filasMatriz || '<tr><td colspan="' + (7 + fasesReporte.length) + '">Esta obra no tiene rubros definidos.</td></tr>'}
         ${costosSinRubro > 0 ? `
           <tr style="background:var(--color-bg);">
             <td>\u2014</td><td><em>Costos generales (sin rubro)</em></td>
-            ${FASES_COSTO.map(f => '<td>' + (matriz['_sin_rubro'] && matriz['_sin_rubro'][f] ? '$' + formatearMoneda(matriz['_sin_rubro'][f]) : '\u2014') + '</td>').join('')}
+            ${fasesReporte.map(f => '<td>' + (matriz['_sin_rubro'] && matriz['_sin_rubro'][f] ? '$' + formatearMoneda(matriz['_sin_rubro'][f]) : '\u2014') + '</td>').join('')}
             <td><strong>$${formatearMoneda(costosSinRubro)}</strong></td>
             <td>\u2014</td><td>\u2014</td><td>\u2014</td><td>\u2014</td>
           </tr>
