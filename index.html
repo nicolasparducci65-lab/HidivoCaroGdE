@@ -6389,19 +6389,19 @@ async function pintarTabFacturasSRI() {
     <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:10px;padding:16px;margin-bottom:16px;">
       <label style="font-weight:600;">Importar reporte del SRI</label>
       <p style="font-size:12px;color:var(--color-text-muted);margin:4px 0 12px;">
-        Descarga del portal del SRI (SRI en l\u00ednea &gt; Facturaci\u00f3n electr\u00f3nica &gt; Comprobantes recibidos/emitidos) el reporte en formato TXT y s\u00fabelo aqu\u00ed. Los comprobantes ya importados se omiten autom\u00e1ticamente por su clave de acceso.
+        Sube los comprobantes del SRI: el reporte TXT del portal (si est\u00e1 disponible) o los archivos <strong>XML individuales</strong> de cada factura \u2014 puedes seleccionar muchos XML a la vez (Ctrl+A en el di\u00e1logo). Los comprobantes ya importados se omiten autom\u00e1ticamente por su clave de acceso.
       </p>
       <div class="field-row">
         <div>
           <label>Tipo de reporte</label>
-          <select id="sri-import-direccion">
+          <select id="sri-import-direccion" onchange="manejarArchivoSri()">
             <option value="recibido">Recibidos (compras \u2192 CxP)</option>
             <option value="emitido">Emitidos (ventas \u2192 CxC)</option>
           </select>
         </div>
         <div>
-          <label>Archivo TXT del SRI</label>
-          <input type="file" id="sri-archivo" accept=".txt,.csv,.tsv" onchange="manejarArchivoSri()">
+          <label>Archivos del SRI (TXT o XML, puedes seleccionar varios)</label>
+          <input type="file" id="sri-archivo" accept=".txt,.csv,.tsv,.xml" multiple onchange="manejarArchivoSri()">
         </div>
       </div>
       <div id="sri-preview-wrap"></div>
@@ -6550,32 +6550,143 @@ function parsearReporteSri(texto) {
   return { comprobantes, ignoradas };
 }
 
-function manejarArchivoSri() {
-  const input = document.getElementById('sri-archivo');
-  const archivo = input.files[0];
-  if (!archivo) return;
-  clearMsg('sri-import-msg');
+function parsearXmlSri(textoXml, direccion) {
+  try {
+    const parser = new DOMParser();
+    let doc = parser.parseFromString(textoXml, 'text/xml');
+    if (doc.querySelector('parsererror')) return { error: 'XML no v\u00e1lido.' };
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    const resultado = parsearReporteSri(reader.result);
-    if (resultado.error) {
-      showMsg('sri-import-msg', resultado.error, 'error');
-      document.getElementById('sri-preview-wrap').innerHTML = '';
-      sri_preview = [];
-      return;
+    // Los XML descargados del SRI suelen venir envueltos en <autorizacion>
+    // con la factura real dentro de <comprobante> (como CDATA)
+    const comprobanteWrapper = doc.querySelector('comprobante');
+    if (comprobanteWrapper && comprobanteWrapper.textContent.trim().startsWith('<')) {
+      doc = parser.parseFromString(comprobanteWrapper.textContent, 'text/xml');
+      if (doc.querySelector('parsererror')) return { error: 'XML interno del comprobante no v\u00e1lido.' };
     }
-    sri_preview = resultado.comprobantes;
-    const total = sri_preview.reduce((acc, c) => acc + c.importe_total, 0);
-    document.getElementById('sri-preview-wrap').innerHTML = `
-      <p style="font-size:13px;margin:10px 0;">
-        Se leyeron <strong>${sri_preview.length}</strong> comprobantes por un total de <strong>$${formatearMoneda(total)}</strong>${resultado.ignoradas ? ' (' + resultado.ignoradas + ' filas sin clave de acceso ignoradas)' : ''}.
-      </p>
-      <button class="btn" onclick="importarComprobantesSri()">Importar comprobantes nuevos</button>
-    `;
-  };
-  reader.onerror = () => showMsg('sri-import-msg', 'No se pudo leer el archivo.', 'error');
-  reader.readAsText(archivo, 'utf-8');
+
+    const raiz = doc.documentElement.nodeName;
+    const TIPOS_XML = {
+      factura: 'Factura',
+      notaCredito: 'Nota de Cr\u00e9dito',
+      notaDebito: 'Nota de D\u00e9bito',
+      comprobanteRetencion: 'Retenci\u00f3n',
+      liquidacionCompra: 'Liquidaci\u00f3n de compra',
+      guiaRemision: 'Gu\u00eda de remisi\u00f3n'
+    };
+    const tipo = TIPOS_XML[raiz] || raiz;
+
+    const texto = (selector) => {
+      const el = doc.querySelector(selector);
+      return el ? el.textContent.trim() : '';
+    };
+
+    const claveAcceso = texto('claveAcceso');
+    if (!claveAcceso) return { error: 'El XML no tiene clave de acceso.' };
+
+    const estab = texto('estab'), ptoEmi = texto('ptoEmi'), secuencial = texto('secuencial');
+    const serie = (estab && ptoEmi && secuencial) ? estab + '-' + ptoEmi + '-' + secuencial : null;
+
+    // IVA: suma de los totalImpuesto con codigo 2 (IVA)
+    let iva = 0;
+    doc.querySelectorAll('totalImpuesto').forEach(ti => {
+      const cod = ti.querySelector('codigo');
+      const val = ti.querySelector('valor');
+      if (cod && cod.textContent.trim() === '2' && val) iva += parsearMontoSri(val.textContent);
+    });
+
+    const subtotal = parsearMontoSri(texto('totalSinImpuestos'));
+    const total = parsearMontoSri(texto('importeTotal')) || parsearMontoSri(texto('valorModificacion')) || (subtotal + iva);
+
+    // Contraparte: si es recibido, el emisor (infoTributaria); si es
+    // emitido, el comprador de nuestra propia factura
+    let rucContraparte, razonContraparte;
+    if (direccion === 'emitido') {
+      rucContraparte = texto('identificacionComprador') || texto('ruc');
+      razonContraparte = texto('razonSocialComprador') || texto('razonSocial');
+    } else {
+      rucContraparte = texto('ruc');
+      razonContraparte = texto('razonSocial');
+    }
+
+    return {
+      comprobante: {
+        clave_acceso: claveAcceso,
+        ruc_contraparte: rucContraparte || null,
+        razon_social_contraparte: razonContraparte || null,
+        tipo_comprobante: tipo,
+        serie_comprobante: serie,
+        fecha_emision: parsearFechaSri(texto('fechaEmision')),
+        fecha_autorizacion: parsearFechaSri(texto('fechaAutorizacion')),
+        valor_sin_impuestos: subtotal,
+        iva: iva,
+        importe_total: total
+      }
+    };
+  } catch (err) {
+    return { error: 'Error procesando el XML: ' + err.message };
+  }
+}
+
+async function manejarArchivoSri() {
+  const input = document.getElementById('sri-archivo');
+  const archivos = Array.from(input.files || []);
+  if (!archivos.length) return;
+  clearMsg('sri-import-msg');
+  const direccion = document.getElementById('sri-import-direccion').value;
+
+  const lecturas = await Promise.all(archivos.map(a => new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ nombre: a.name, texto: reader.result });
+    reader.onerror = () => resolve({ nombre: a.name, texto: null });
+    reader.readAsText(a, 'utf-8');
+  })));
+
+  const comprobantes = [];
+  const errores = [];
+  let ignoradas = 0;
+
+  for (const lectura of lecturas) {
+    if (lectura.texto === null) {
+      errores.push(lectura.nombre + ': no se pudo leer.');
+      continue;
+    }
+    const esXml = /\.xml$/i.test(lectura.nombre) || lectura.texto.trim().startsWith('<');
+    if (esXml) {
+      const r = parsearXmlSri(lectura.texto, direccion);
+      if (r.error) errores.push(lectura.nombre + ': ' + r.error);
+      else comprobantes.push(r.comprobante);
+    } else {
+      const r = parsearReporteSri(lectura.texto);
+      if (r.error) errores.push(lectura.nombre + ': ' + r.error);
+      else {
+        comprobantes.push(...r.comprobantes);
+        ignoradas += r.ignoradas;
+      }
+    }
+  }
+
+  // Deduplicación dentro de la propia selección (ej. el mismo XML dos veces)
+  const clavesVistas = new Set();
+  sri_preview = comprobantes.filter(c => {
+    if (clavesVistas.has(c.clave_acceso)) return false;
+    clavesVistas.add(c.clave_acceso);
+    return true;
+  });
+
+  if (!sri_preview.length) {
+    showMsg('sri-import-msg', 'No se pudo leer ning\u00fan comprobante v\u00e1lido.' + (errores.length ? ' Detalles: ' + errores.join(' | ') : ''), 'error');
+    document.getElementById('sri-preview-wrap').innerHTML = '';
+    return;
+  }
+
+  const total = sri_preview.reduce((acc, c) => acc + c.importe_total, 0);
+  document.getElementById('sri-preview-wrap').innerHTML = `
+    <p style="font-size:13px;margin:10px 0;">
+      Se leyeron <strong>${sri_preview.length}</strong> comprobantes por un total de <strong>$${formatearMoneda(total)}</strong>${ignoradas ? ' (' + ignoradas + ' filas sin clave de acceso ignoradas)' : ''}.
+      ${errores.length ? '<br><span style="color:var(--color-danger);">Archivos con problemas: ' + errores.map(e => escapeHtml(e)).join(' | ') + '</span>' : ''}
+    </p>
+    <button class="btn" onclick="importarComprobantesSri()">Importar comprobantes nuevos</button>
+  `;
 }
 
 async function importarComprobantesSri() {
