@@ -6552,9 +6552,18 @@ function parsearReporteSri(texto) {
 
 function parsearXmlSri(textoXml, direccion) {
   try {
+    // Sanitizar: quitar BOM y cualquier basura antes del primer '<'
+    let limpio = String(textoXml).replace(/^\uFEFF/, '');
+    const primerTag = limpio.indexOf('<');
+    if (primerTag === -1) return { error: 'El archivo no contiene XML.' };
+    limpio = limpio.slice(primerTag);
+
     const parser = new DOMParser();
-    let doc = parser.parseFromString(textoXml, 'text/xml');
-    if (doc.querySelector('parsererror')) return { error: 'XML no v\u00e1lido.' };
+    let doc = parser.parseFromString(limpio, 'text/xml');
+    const errorParseo = doc.querySelector('parsererror');
+    if (errorParseo) {
+      return { error: 'XML no v\u00e1lido (' + errorParseo.textContent.trim().slice(0, 120) + ')', reintentarConLatin1: true };
+    }
 
     // Los XML descargados del SRI suelen venir envueltos en <autorizacion>
     // con la factura real dentro de <comprobante> (como CDATA)
@@ -6636,9 +6645,9 @@ async function manejarArchivoSri() {
 
   const lecturas = await Promise.all(archivos.map(a => new Promise((resolve) => {
     const reader = new FileReader();
-    reader.onload = () => resolve({ nombre: a.name, texto: reader.result });
-    reader.onerror = () => resolve({ nombre: a.name, texto: null });
-    reader.readAsText(a, 'utf-8');
+    reader.onload = () => resolve({ nombre: a.name, buffer: reader.result });
+    reader.onerror = () => resolve({ nombre: a.name, buffer: null });
+    reader.readAsArrayBuffer(a);
   })));
 
   const comprobantes = [];
@@ -6646,17 +6655,25 @@ async function manejarArchivoSri() {
   let ignoradas = 0;
 
   for (const lectura of lecturas) {
-    if (lectura.texto === null) {
+    if (lectura.buffer === null) {
       errores.push(lectura.nombre + ': no se pudo leer.');
       continue;
     }
-    const esXml = /\.xml$/i.test(lectura.nombre) || lectura.texto.trim().startsWith('<');
+    // Decodificar primero como UTF-8; los XML del SRI a veces vienen en
+    // ISO-8859-1 (Latin-1), así que si el parseo falla se reintenta.
+    const textoUtf8 = new TextDecoder('utf-8').decode(lectura.buffer);
+    const esXml = /\.xml$/i.test(lectura.nombre) || textoUtf8.trim().replace(/^\uFEFF/, '').startsWith('<');
+
     if (esXml) {
-      const r = parsearXmlSri(lectura.texto, direccion);
+      let r = parsearXmlSri(textoUtf8, direccion);
+      if (r.error && r.reintentarConLatin1) {
+        const textoLatin1 = new TextDecoder('iso-8859-1').decode(lectura.buffer);
+        r = parsearXmlSri(textoLatin1, direccion);
+      }
       if (r.error) errores.push(lectura.nombre + ': ' + r.error);
       else comprobantes.push(r.comprobante);
     } else {
-      const r = parsearReporteSri(lectura.texto);
+      const r = parsearReporteSri(textoUtf8);
       if (r.error) errores.push(lectura.nombre + ': ' + r.error);
       else {
         comprobantes.push(...r.comprobantes);
