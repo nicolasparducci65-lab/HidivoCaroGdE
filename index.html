@@ -5615,10 +5615,15 @@ async function sincronizarDesdeGdp() {
   }
 }
 
-function abrirModalObra(id) {
+async function abrirModalObra(id) {
   modal_obra_id = id || null;
   const obra = id ? obras_cache.find(o => o.id === id) : null;
   const siguienteCodigo = 'OB-' + String(obras_cache.length + 1).padStart(3, '0');
+
+  if (!perfiles_costos_cache.length) {
+    const { data } = await sb.from('perfiles').select('id, nombre_completo').order('nombre_completo');
+    perfiles_costos_cache = data || [];
+  }
 
   document.getElementById('modal-container').innerHTML = `
     <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
@@ -5644,6 +5649,11 @@ function abrirModalObra(id) {
           <option value="">Sin contrato</option>
           ${contratos_cache.map(c => '<option value="' + c.id + '" ' + (obra?.contrato_id === c.id ? 'selected' : '') + '>N.\u00b0 ' + escapeHtml(c.numero) + ' \u2014 ' + escapeHtml(c.clientes?.razon_social) + '</option>').join('')}
         </select>
+        <label>Superintendente (clasifica facturas de esta obra)</label>
+        <select id="obra-superintendente">
+          <option value="">Sin superintendente</option>
+          ${perfiles_costos_cache.map(p => '<option value="' + p.id + '" ' + (obra?.superintendente_id === p.id ? 'selected' : '') + '>' + escapeHtml(p.nombre_completo) + '</option>').join('')}
+        </select>
         <div id="obra-msg"></div>
         <div class="modal-actions">
           <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -5659,6 +5669,7 @@ async function guardarObra() {
     codigo: document.getElementById('obra-codigo').value.trim(),
     nombre: document.getElementById('obra-nombre').value.trim(),
     contrato_id: document.getElementById('obra-contrato').value || null,
+    superintendente_id: document.getElementById('obra-superintendente').value || null,
     estado: document.getElementById('obra-estado').value
   };
   if (!payload.codigo || !payload.nombre) {
@@ -6352,6 +6363,7 @@ async function generarReporteCostos() {
 
 let sri_filtros = { direccion: '', estado: 'pendiente' };
 let sri_preview = [];
+let perfiles_costos_cache = [];
 
 function normalizarEncabezadoSri(h) {
   return String(h || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
@@ -6417,6 +6429,8 @@ async function pintarTabFacturasSRI() {
       <select id="sri-filtro-estado" onchange="aplicarFiltrosSri()">
         <option value="">Todos los estados</option>
         <option value="pendiente" selected>Pendientes</option>
+        <option value="asignado">Asignadas a obra</option>
+        <option value="en_revision">En revisi\u00f3n</option>
         <option value="clasificado">Clasificados</option>
         <option value="descartado">Descartados</option>
       </select>
@@ -6476,13 +6490,27 @@ function pintarComprobantesSri() {
     return;
   }
   tbody.innerHTML = lista.map(c => {
-    const estadoBadge = c.estado === 'pendiente'
-      ? '<span class="badge cartera-pendiente">Pendiente</span>'
-      : (c.estado === 'clasificado' ? '<span class="badge activo">Clasificado</span>' : '<span class="badge inactivo">Descartado</span>');
+    const BADGES_ESTADO = {
+      pendiente: '<span class="badge cartera-pendiente">Pendiente</span>',
+      asignado: '<span class="badge" style="background:#e8f0fe;color:#0c447c;">Asignada</span>',
+      en_revision: '<span class="badge" style="background:#fff3cd;color:#8a6d00;">En revisi\u00f3n</span>',
+      clasificado: '<span class="badge activo">Clasificado</span>',
+      descartado: '<span class="badge inactivo">Descartado</span>'
+    };
+    const estadoBadge = BADGES_ESTADO[c.estado] || c.estado;
+    const obraAsignada = c.obra_id ? obras_cache.find(o => o.id === c.obra_id) : null;
+    const obraLabel = obraAsignada ? '<br><span style="font-size:11px;color:var(--color-text-muted);">' + escapeHtml(obraAsignada.codigo) + '</span>' : '';
+
     let acciones = '';
     if (c.estado === 'pendiente') {
-      acciones = '<a onclick="crearDocumentoDesdeSri(\'' + c.id + '\')">' + (c.direccion === 'recibido' ? 'Crear CxP' : 'Crear CxC') + '</a> ' +
-                 '<a style="color:var(--color-danger);" onclick="descartarComprobanteSri(\'' + c.id + '\', true)">Descartar</a>';
+      acciones = (c.direccion === 'recibido'
+          ? '<a onclick="asignarObraSri(\'' + c.id + '\')">Asignar a obra</a> <a onclick="crearDocumentoDesdeSri(\'' + c.id + '\')">Crear CxP</a> '
+          : '<a onclick="crearDocumentoDesdeSri(\'' + c.id + '\')">Crear CxC</a> ') +
+        '<a style="color:var(--color-danger);" onclick="descartarComprobanteSri(\'' + c.id + '\', true)">Descartar</a>';
+    } else if (c.estado === 'asignado') {
+      acciones = '<a onclick="quitarAsignacionSri(\'' + c.id + '\')">Quitar asignaci\u00f3n</a>';
+    } else if (c.estado === 'en_revision') {
+      acciones = '<a onclick="revisarComprobanteSri(\'' + c.id + '\')"><strong>Revisar</strong></a>';
     } else if (c.estado === 'descartado') {
       acciones = '<a onclick="descartarComprobanteSri(\'' + c.id + '\', false)">Restaurar</a>';
     }
@@ -6495,11 +6523,177 @@ function pintarComprobantesSri() {
         <td>$${formatearMoneda(c.valor_sin_impuestos)}</td>
         <td>$${formatearMoneda(c.iva)}</td>
         <td><strong>$${formatearMoneda(c.importe_total)}</strong></td>
-        <td>${estadoBadge}</td>
+        <td>${estadoBadge}${obraLabel}</td>
         <td class="row-actions">${acciones}</td>
       </tr>
     `;
   }).join('');
+}
+
+function asignarObraSri(id) {
+  const c = sri_comprobantes_cache.find(x => x.id === id);
+  if (!c) return;
+  const obrasActivas = obras_cache.filter(o => o.estado === 'activa');
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card">
+        <h3>Asignar a obra</h3>
+        <p style="font-size:13px;color:var(--color-text-muted);">
+          ${escapeHtml(c.tipo_comprobante || 'Comprobante')} ${escapeHtml(c.serie_comprobante || '')} \u2014 ${escapeHtml(c.razon_social_contraparte || '')}<br>
+          Total: $${formatearMoneda(c.importe_total)}
+        </p>
+        <label>Obra (su superintendente podr\u00e1 clasificarla)</label>
+        <select id="asignar-obra-select">
+          <option value="">Selecciona una obra...</option>
+          ${obrasActivas.map(o => '<option value="' + o.id + '">' + escapeHtml(o.codigo) + ' \u2014 ' + escapeHtml(o.nombre) + (o.superintendente_id ? '' : ' (sin superintendente)') + '</option>').join('')}
+        </select>
+        <div id="asignar-obra-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn" onclick="guardarAsignacionSri('${c.id}')">Asignar y enviar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarAsignacionSri(id) {
+  const obraId = document.getElementById('asignar-obra-select').value;
+  if (!obraId) {
+    showMsg('asignar-obra-msg', 'Selecciona una obra.', 'error');
+    return;
+  }
+  const obra = obras_cache.find(o => o.id === obraId);
+  if (obra && !obra.superintendente_id) {
+    if (!confirm('Esta obra no tiene superintendente asignado, nadie podr\u00e1 clasificar la factura hasta que definas uno en la obra. \u00bfAsignar de todas formas?')) return;
+  }
+  const { error } = await sb.from('sri_comprobantes')
+    .update({ obra_id: obraId, estado: 'asignado', asignado_at: new Date().toISOString(), observacion_admin: null })
+    .eq('id', id);
+  if (error) {
+    showMsg('asignar-obra-msg', 'Error: ' + error.message, 'error');
+    return;
+  }
+  closeModal();
+  await cargarComprobantesSri();
+}
+
+async function quitarAsignacionSri(id) {
+  const { error } = await sb.from('sri_comprobantes')
+    .update({ obra_id: null, estado: 'pendiente', asignado_at: null, observacion_admin: null })
+    .eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  // Limpia cualquier borrador que el superintendente hubiera empezado
+  await sb.from('costos_borrador').delete().eq('sri_comprobante_id', id);
+  await cargarComprobantesSri();
+}
+
+async function revisarComprobanteSri(id) {
+  const c = sri_comprobantes_cache.find(x => x.id === id);
+  if (!c) return;
+  const { data: lineas } = await sb.from('costos_borrador')
+    .select('*, obra_rubros(codigo, descripcion), plan_cuentas(codigo, nombre)')
+    .eq('sri_comprobante_id', id)
+    .order('created_at');
+  const obra = obras_cache.find(o => o.id === c.obra_id);
+  const totalLineas = (lineas || []).reduce((acc, l) => acc + Number(l.monto || 0), 0);
+  const diferencia = Number(c.valor_sin_impuestos || 0) - totalLineas;
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card extra-wide">
+        <h3>Revisar clasificaci\u00f3n \u2014 ${escapeHtml(c.tipo_comprobante || '')} ${escapeHtml(c.serie_comprobante || '')}</h3>
+        <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:12px;">
+          <strong>${escapeHtml(c.razon_social_contraparte || '')}</strong> (${escapeHtml(c.ruc_contraparte || '')}) \u00b7 ${c.fecha_emision || ''}<br>
+          Obra: ${obra ? escapeHtml(obra.codigo) + ' \u2014 ' + escapeHtml(obra.nombre) : '\u2014'} \u00b7
+          Subtotal sin IVA: <strong>$${formatearMoneda(c.valor_sin_impuestos)}</strong> \u00b7 IVA: $${formatearMoneda(c.iva)} \u00b7 Total: $${formatearMoneda(c.importe_total)}
+        </p>
+        <table class="data-table">
+          <thead><tr><th>Rubro</th><th>Cuenta</th><th>Descripci\u00f3n</th><th>Monto</th></tr></thead>
+          <tbody>
+            ${(lineas || []).map(l => `
+              <tr>
+                <td>${l.obra_rubros ? escapeHtml(l.obra_rubros.codigo) + ' \u2014 ' + escapeHtml(l.obra_rubros.descripcion) : '<em>Costo general</em>'}</td>
+                <td>${l.plan_cuentas ? escapeHtml(l.plan_cuentas.codigo) + ' ' + escapeHtml(l.plan_cuentas.nombre) : '\u2014'}</td>
+                <td>${escapeHtml(l.descripcion) || '\u2014'}</td>
+                <td>$${formatearMoneda(l.monto)}</td>
+              </tr>
+            `).join('') || '<tr><td colspan="4">El superintendente no registr\u00f3 l\u00edneas.</td></tr>'}
+            <tr style="background:var(--color-bg);">
+              <td colspan="3"><strong>Total clasificado</strong>${Math.abs(diferencia) > 0.01 ? ' <span style="color:var(--color-danger);">(difiere del subtotal en $' + formatearMoneda(Math.abs(diferencia)) + ')</span>' : ''}</td>
+              <td><strong>$${formatearMoneda(totalLineas)}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+        <label style="margin-top:14px;">Observaci\u00f3n (obligatoria solo si rechazas)</label>
+        <textarea id="revision-observacion" placeholder="ej. El monto del rubro 501001 debe repartirse con transporte"></textarea>
+        <div id="revision-msg"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+          <button class="btn btn-secondary" style="color:var(--color-danger);" onclick="rechazarComprobanteSri('${c.id}')">Rechazar y devolver</button>
+          <button class="btn" onclick="aprobarComprobanteSri('${c.id}')">Aprobar (crea costos + CxP)</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function rechazarComprobanteSri(id) {
+  const observacion = document.getElementById('revision-observacion').value.trim();
+  if (!observacion) {
+    showMsg('revision-msg', 'Escribe una observaci\u00f3n para que el superintendente sepa qu\u00e9 corregir.', 'error');
+    return;
+  }
+  const { error } = await sb.from('sri_comprobantes')
+    .update({ estado: 'asignado', observacion_admin: observacion })
+    .eq('id', id);
+  if (error) { showMsg('revision-msg', 'Error: ' + error.message, 'error'); return; }
+  closeModal();
+  await cargarComprobantesSri();
+}
+
+async function aprobarComprobanteSri(id) {
+  const c = sri_comprobantes_cache.find(x => x.id === id);
+  if (!c) return;
+  const { data: lineas } = await sb.from('costos_borrador').select('*').eq('sri_comprobante_id', id);
+  if (!lineas || !lineas.length) {
+    showMsg('revision-msg', 'No hay l\u00edneas de clasificaci\u00f3n que aprobar.', 'error');
+    return;
+  }
+
+  // 1. Crear el documento CxP en Cartera
+  const resultado = await crearCarteraDesdeComprobante(c);
+  if (resultado.error) {
+    showMsg('revision-msg', resultado.error, 'error');
+    return;
+  }
+
+  // 2. Convertir los borradores en costos oficiales
+  const { data: { user } } = await sb.auth.getUser();
+  const filas = lineas.map(l => ({
+    obra_id: l.obra_id,
+    rubro_id: l.rubro_id,
+    cuenta_id: l.cuenta_id,
+    proveedor_id: resultado.esRecibido ? resultado.terceroId : null,
+    cartera_documento_id: resultado.docId,
+    fecha: c.fecha_emision || new Date().toISOString().slice(0, 10),
+    descripcion: l.descripcion || ((c.tipo_comprobante || 'Comprobante') + ' ' + (c.serie_comprobante || '')),
+    monto: Number(l.monto),
+    creado_por: user.id
+  }));
+  const { error: errCostos } = await sb.from('obra_costos').insert(filas);
+  if (errCostos) {
+    showMsg('revision-msg', 'Se cre\u00f3 el CxP pero fall\u00f3 el registro de costos: ' + errCostos.message, 'error');
+    return;
+  }
+
+  // 3. Cerrar el ciclo
+  await sb.from('costos_borrador').delete().eq('sri_comprobante_id', id);
+  await sb.from('sri_comprobantes')
+    .update({ estado: 'clasificado', cartera_documento_id: resultado.docId, observacion_admin: null })
+    .eq('id', id);
+  closeModal();
+  await cargarComprobantesSri();
 }
 
 function parsearReporteSri(texto) {
@@ -6746,19 +6940,17 @@ async function importarComprobantesSri() {
   await cargarComprobantesSri();
 }
 
-async function crearDocumentoDesdeSri(id) {
-  const c = sri_comprobantes_cache.find(x => x.id === id);
-  if (!c) return;
-
+// Núcleo reutilizable: crea el documento de Cartera (CxP o CxC) a partir
+// de un comprobante SRI, vinculando o creando el tercero por RUC.
+// Devuelve { docId, terceroId, esRecibido } o { error }.
+async function crearCarteraDesdeComprobante(c) {
   if (!c.ruc_contraparte) {
-    alert('Este comprobante no tiene RUC de contraparte; reg\u00edstralo manualmente en Cartera.');
-    return;
+    return { error: 'Este comprobante no tiene RUC de contraparte; reg\u00edstralo manualmente en Cartera.' };
   }
 
   const esRecibido = c.direccion === 'recibido';
   const tabla = esRecibido ? 'proveedores' : 'clientes';
 
-  // Buscar la contraparte por RUC, o crearla si no existe
   const { data: encontrados } = await sb.from(tabla).select('*').eq('ruc', c.ruc_contraparte).limit(1);
   let tercero = encontrados && encontrados[0];
   if (!tercero) {
@@ -6766,8 +6958,7 @@ async function crearDocumentoDesdeSri(id) {
       .insert({ razon_social: c.razon_social_contraparte || c.ruc_contraparte, ruc: c.ruc_contraparte })
       .select().single();
     if (errorCrear) {
-      alert('Error creando ' + (esRecibido ? 'el proveedor' : 'el cliente') + ': ' + errorCrear.message);
-      return;
+      return { error: 'Error creando ' + (esRecibido ? 'el proveedor' : 'el cliente') + ': ' + errorCrear.message };
     }
     tercero = creado;
   }
@@ -6791,11 +6982,22 @@ async function crearDocumentoDesdeSri(id) {
 
   const { data: doc, error } = await sb.from('cartera_documentos').insert(payload).select().single();
   if (error) {
-    alert('Error creando el documento de Cartera: ' + error.message);
+    return { error: 'Error creando el documento de Cartera: ' + error.message };
+  }
+  return { docId: doc.id, terceroId: tercero.id, esRecibido };
+}
+
+async function crearDocumentoDesdeSri(id) {
+  const c = sri_comprobantes_cache.find(x => x.id === id);
+  if (!c) return;
+
+  const resultado = await crearCarteraDesdeComprobante(c);
+  if (resultado.error) {
+    alert(resultado.error);
     return;
   }
 
-  await sb.from('sri_comprobantes').update({ estado: 'clasificado', cartera_documento_id: doc.id }).eq('id', id);
+  await sb.from('sri_comprobantes').update({ estado: 'clasificado', cartera_documento_id: resultado.docId }).eq('id', id);
   await cargarComprobantesSri();
 }
 
