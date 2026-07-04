@@ -5543,9 +5543,11 @@ function cambiarTabCostos(tab) {
 function pintarTabObras() {
   const cont = document.getElementById('costos-contenido');
   cont.innerHTML = `
-    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:12px;">
+      <button class="btn btn-secondary" id="btn-sync-gdp" onclick="sincronizarDesdeGdp()">Sincronizar desde GdP</button>
       <button class="btn" onclick="abrirModalObra()">+ Nueva obra</button>
     </div>
+    <div id="sync-gdp-msg"></div>
     <table class="data-table">
       <thead>
         <tr><th>Código</th><th>Nombre</th><th>Contrato</th><th>Estado</th><th></th></tr>
@@ -5554,7 +5556,7 @@ function pintarTabObras() {
         ${obras_cache.length ? obras_cache.map(o => `
           <tr>
             <td>${escapeHtml(o.codigo)}</td>
-            <td>${escapeHtml(o.nombre)}</td>
+            <td>${escapeHtml(o.nombre)}${o.gdp_proyecto_id ? ' <span class="badge inactivo" style="font-size:10px;">GdP</span>' : ''}</td>
             <td>${o.contratos ? 'N.\u00b0 ' + escapeHtml(o.contratos.numero) : '\u2014'}</td>
             <td><span class="badge ${o.estado === 'activa' ? 'activo' : 'inactivo'}">${o.estado === 'activa' ? 'Activa' : 'Cerrada'}</span></td>
             <td class="row-actions">
@@ -5566,6 +5568,51 @@ function pintarTabObras() {
       </tbody>
     </table>
   `;
+}
+
+async function sincronizarDesdeGdp() {
+  const btn = document.getElementById('btn-sync-gdp');
+  btn.disabled = true;
+  btn.textContent = 'Sincronizando...';
+  clearMsg('sync-gdp-msg');
+
+  const { data: { session } } = await sb.auth.getSession();
+
+  try {
+    const response = await fetch(SUPABASE_URL + '/functions/v1/sincronizar-gdp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + session.access_token
+      },
+      body: JSON.stringify({})
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      showMsg('sync-gdp-msg', 'Error: ' + (result.error || 'No se pudo sincronizar.'), 'error');
+      return;
+    }
+
+    let mensaje = 'Sincronizaci\u00f3n completa: ' + result.proyectos_nuevos + ' obra(s) nueva(s), ' + result.proyectos_actualizados + ' actualizada(s); ' +
+      result.rubros_nuevos + ' rubro(s) nuevo(s), ' + result.rubros_actualizados + ' actualizado(s).';
+    if (result.advertencias && result.advertencias.length) {
+      mensaje += ' Advertencias: ' + result.advertencias.join(' | ');
+    }
+    showMsg('sync-gdp-msg', mensaje, 'success');
+
+    await renderCostos();
+
+  } catch (err) {
+    showMsg('sync-gdp-msg', 'Error de conexi\u00f3n: ' + err.message, 'error');
+  } finally {
+    const btnFinal = document.getElementById('btn-sync-gdp');
+    if (btnFinal) {
+      btnFinal.disabled = false;
+      btnFinal.textContent = 'Sincronizar desde GdP';
+    }
+  }
 }
 
 function abrirModalObra(id) {
