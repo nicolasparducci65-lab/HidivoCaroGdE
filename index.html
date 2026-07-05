@@ -6591,13 +6591,33 @@ async function quitarAsignacionSri(id) {
 async function revisarComprobanteSri(id) {
   const c = sri_comprobantes_cache.find(x => x.id === id);
   if (!c) return;
-  const { data: lineas } = await sb.from('costos_borrador')
-    .select('*, obra_rubros(codigo, descripcion), plan_cuentas(codigo, nombre)')
-    .eq('sri_comprobante_id', id)
-    .order('created_at');
+  const [{ data: lineas }, { data: itemsFactura }] = await Promise.all([
+    sb.from('costos_borrador')
+      .select('*, obra_rubros(codigo, descripcion), plan_cuentas(codigo, nombre)')
+      .eq('sri_comprobante_id', id)
+      .order('created_at'),
+    sb.from('sri_comprobante_items').select('*').eq('sri_comprobante_id', id).order('orden')
+  ]);
   const obra = obras_cache.find(o => o.id === c.obra_id);
   const totalLineas = (lineas || []).reduce((acc, l) => acc + Number(l.monto || 0), 0);
   const diferencia = Number(c.valor_sin_impuestos || 0) - totalLineas;
+
+  const bloqueItems = (itemsFactura && itemsFactura.length) ? `
+    <label style="margin-top:12px;">Detalle de la factura (${itemsFactura.length} \u00edtem${itemsFactura.length > 1 ? 's' : ''})</label>
+    <table class="data-table" style="font-size:12px;">
+      <thead><tr><th>Descripci\u00f3n</th><th>Cant.</th><th>P. unitario</th><th>Total s/imp.</th></tr></thead>
+      <tbody>
+        ${itemsFactura.map(it => `
+          <tr>
+            <td>${escapeHtml(it.descripcion)}</td>
+            <td>${Number(it.cantidad || 0)}</td>
+            <td>$${formatearMoneda(it.precio_unitario)}</td>
+            <td>$${formatearMoneda(it.total_sin_impuesto)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  ` : '';
 
   document.getElementById('modal-container').innerHTML = `
     <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
@@ -6608,6 +6628,8 @@ async function revisarComprobanteSri(id) {
           Obra: ${obra ? escapeHtml(obra.codigo) + ' \u2014 ' + escapeHtml(obra.nombre) : '\u2014'} \u00b7
           Subtotal sin IVA: <strong>$${formatearMoneda(c.valor_sin_impuestos)}</strong> \u00b7 IVA: $${formatearMoneda(c.iva)} \u00b7 Total: $${formatearMoneda(c.importe_total)}
         </p>
+        ${bloqueItems}
+        <label style="margin-top:12px;">Clasificaci\u00f3n propuesta por el superintendente</label>
         <table class="data-table">
           <thead><tr><th>Rubro</th><th>Cuenta</th><th>Descripci\u00f3n</th><th>Monto</th></tr></thead>
           <tbody>
@@ -6811,6 +6833,24 @@ function parsearXmlSri(textoXml, direccion) {
       razonContraparte = texto('razonSocial');
     }
 
+    // Detalle línea por línea de la factura (nodos <detalle>)
+    const items = [];
+    doc.querySelectorAll('detalle').forEach((d, i) => {
+      const g = (sel) => {
+        const el = d.querySelector(sel);
+        return el ? el.textContent.trim() : '';
+      };
+      const desc = g('descripcion');
+      if (!desc) return;
+      items.push({
+        orden: i,
+        descripcion: desc,
+        cantidad: parsearMontoSri(g('cantidad')),
+        precio_unitario: parsearMontoSri(g('precioUnitario')),
+        total_sin_impuesto: parsearMontoSri(g('precioTotalSinImpuesto'))
+      });
+    });
+
     return {
       comprobante: {
         clave_acceso: claveAcceso,
@@ -6823,7 +6863,8 @@ function parsearXmlSri(textoXml, direccion) {
         valor_sin_impuestos: subtotal,
         iva: iva,
         importe_total: total
-      }
+      },
+      items
     };
   } catch (err) {
     return { error: 'Error procesando el XML: ' + err.message };
@@ -6865,7 +6906,7 @@ async function manejarArchivoSri() {
         r = parsearXmlSri(textoLatin1, direccion);
       }
       if (r.error) errores.push(lectura.nombre + ': ' + r.error);
-      else comprobantes.push(r.comprobante);
+      else comprobantes.push({ ...r.comprobante, _items: r.items || [] });
     } else {
       const r = parsearReporteSri(textoUtf8);
       if (r.error) errores.push(lectura.nombre + ': ' + r.error);
@@ -6923,14 +6964,36 @@ async function importarComprobantesSri() {
     return;
   }
 
+  // Separar los ítems (van a su propia tabla, vinculados por clave)
+  const itemsPorClave = {};
+  const filasComprobantes = nuevos.map(c => {
+    const { _items, ...resto } = c;
+    if (_items && _items.length) itemsPorClave[c.clave_acceso] = _items;
+    return resto;
+  });
+
   let insertados = 0;
-  for (let i = 0; i < nuevos.length; i += 200) {
-    const { error } = await sb.from('sri_comprobantes').insert(nuevos.slice(i, i + 200));
+  for (let i = 0; i < filasComprobantes.length; i += 200) {
+    const { data: lote, error } = await sb.from('sri_comprobantes')
+      .insert(filasComprobantes.slice(i, i + 200))
+      .select('id, clave_acceso');
     if (error) {
       showMsg('sri-import-msg', 'Error al importar (lote ' + (i / 200 + 1) + '): ' + error.message, 'error');
       return;
     }
-    insertados += Math.min(200, nuevos.length - i);
+    insertados += (lote || []).length;
+
+    // Insertar los ítems de este lote
+    const filasItems = [];
+    (lote || []).forEach(comp => {
+      (itemsPorClave[comp.clave_acceso] || []).forEach(item => {
+        filasItems.push({ ...item, sri_comprobante_id: comp.id });
+      });
+    });
+    if (filasItems.length) {
+      const { error: errItems } = await sb.from('sri_comprobante_items').insert(filasItems);
+      if (errItems) console.error('Error guardando ítems:', errItems.message);
+    }
   }
 
   showMsg('sri-import-msg', 'Importados ' + insertados + ' comprobantes nuevos (' + existentes.size + ' ya exist\u00edan y se omitieron).', 'success');
