@@ -4990,6 +4990,8 @@ function pintarFormularioCorrespondencia(registro, direccion, datosRespuesta) {
           <div><input type="text" id="corr-dest-ciudad" value="${escapeHtml(registro?.destinatario_ciudad) || (esEnviada ? 'Ciudad' : '')}" placeholder="Ciudad" ${bloqueado ? 'disabled' : ''} ${esEnviada ? '' : 'class="hidden"'}></div>
         </div>
         <input type="email" id="corr-dest-email" value="${escapeHtml(registro?.destinatario_email || placeholderRespuesta.destinatario_email)}" placeholder="Correo de contacto ${esEnviada ? '(para envío)' : '(opcional)'}" ${bloqueado ? 'disabled' : ''} style="margin-top:10px;">
+        <input type="text" id="corr-cc-emails" value="${escapeHtml(registro?.cc_emails)}" placeholder="CC: otros correos separados por coma (opcional)" ${bloqueado ? 'disabled' : ''} style="margin-top:10px;" ${esEnviada ? '' : 'class="hidden"'}>
+        <input type="text" id="corr-saludo" value="${escapeHtml(registro?.saludo_correo)}" placeholder="Saludo del correo (ej. Estimado Ing. Pérez, reciba un cordial saludo:)" ${bloqueado ? 'disabled' : ''} style="margin-top:10px;" ${esEnviada ? '' : 'class="hidden"'}>
 
         <label style="margin-top:16px;">Referencia (Ref.:)</label>
         <input type="text" id="corr-referencia" value="${escapeHtml(registro?.referencia || placeholderRespuesta.referencia)}" placeholder="ej. Contrato Tablero de control - Orden de Trabajo 006-2026" ${bloqueado ? 'disabled' : ''}>
@@ -5277,6 +5279,8 @@ function leerDatosFormularioCorrespondencia() {
     destinatario_entidad: document.getElementById('corr-dest-entidad').value.trim(),
     destinatario_ciudad: document.getElementById('corr-dest-ciudad')?.value.trim() || 'Ciudad',
     destinatario_email: document.getElementById('corr-dest-email').value.trim(),
+    cc_emails: document.getElementById('corr-cc-emails')?.value.trim() || '',
+    saludo_correo: document.getElementById('corr-saludo')?.value.trim() || '',
     referencia: document.getElementById('corr-referencia').value.trim(),
     cuerpo: document.getElementById('corr-cuerpo').value.trim(),
     firmante_nombre: document.getElementById('corr-firma-nombre')?.value.trim() || '',
@@ -5369,6 +5373,8 @@ async function guardarCorrespondencia() {
     destinatario_entidad: datos.destinatario_entidad || null,
     destinatario_ciudad: datos.destinatario_ciudad,
     destinatario_email: datos.destinatario_email || null,
+    cc_emails: datos.cc_emails || null,
+    saludo_correo: datos.saludo_correo || null,
     referencia: datos.referencia || null,
     cuerpo: datos.cuerpo || null,
     firmante_nombre: datos.firmante_nombre || null,
@@ -5469,7 +5475,18 @@ async function enviarCorrespondenciaPorCorreo(id) {
     alert('Este es un Oficio: primero debes subir el PDF firmado antes de poder enviarlo por correo.');
     return;
   }
-  if (!confirm('¿Enviar este documento por correo a ' + registro.destinatario_email + '?')) return;
+  if (!registro.saludo_correo) {
+    alert('Este registro no tiene saludo del correo. Abre el registro, escribe el saludo (ej. "Estimado Ing. Pérez:") y guarda antes de enviar.');
+    return;
+  }
+  const listaCC = (registro.cc_emails || '').split(/[,;]/).map(e => e.trim()).filter(e => e);
+  const ccInvalidos = listaCC.filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+  if (ccInvalidos.length) {
+    alert('Hay correos de copia (CC) mal escritos: ' + ccInvalidos.join(', ') + '. Corrígelos en el registro antes de enviar.');
+    return;
+  }
+  const textoCC = listaCC.length ? '\ncon copia a: ' + listaCC.join(', ') : '';
+  if (!confirm('¿Enviar este documento por correo a ' + registro.destinatario_email + '?' + textoCC)) return;
 
   const { data: { session } } = await sb.auth.getSession();
 
