@@ -1046,6 +1046,7 @@
 </div>
 
 <div id="modal-container"></div>
+<div id="modal-firma-container"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -5440,7 +5441,7 @@ function pintarAccionesPdfCorrespondencia(registro) {
         <div class="acciones">
           ${registro.pdf_firmado_url
             ? '<a onclick="descargarDocumentoCorrespondencia(\'' + registro.pdf_firmado_url + '\')">Descargar</a>'
-            : '<label class="adjuntos-drop" for="corr-firmado-input" style="display:inline;padding:4px 10px;">Subir PDF firmado</label><input type="file" id="corr-firmado-input" accept="application/pdf" onchange="subirPdfFirmadoCorrespondencia(this.files[0])">'}
+            : '<a onclick="abrirModalFirmaElectronica()" style="font-weight:600;margin-right:10px;">Firmar aquí (.p12)</a><label class="adjuntos-drop" for="corr-firmado-input" style="display:inline;padding:4px 10px;">Subir PDF firmado</label><input type="file" id="corr-firmado-input" accept="application/pdf" onchange="subirPdfFirmadoCorrespondencia(this.files[0])">'}
         </div>
       </div>
       ${registro.destinatario_email ? `
@@ -5822,6 +5823,308 @@ async function descargarDocumentoCorrespondencia(ruta) {
   const { data, error } = await sb.storage.from('comunicaciones-adjuntos').createSignedUrl(ruta, 60);
   if (error) { alert('Error: ' + error.message); return; }
   window.open(data.signedUrl, '_blank');
+}
+
+// ---- Firma electrónica en el navegador (.p12) ----
+// La clave privada y la contraseña NUNCA salen del navegador del usuario:
+// el PDF se firma localmente y solo el resultado firmado sube a Storage.
+
+let librerias_firma_cargadas = false;
+
+function cargarScript(url) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('No se pudo cargar ' + url));
+    document.head.appendChild(s);
+  });
+}
+
+async function cargarLibreriasFirma() {
+  if (librerias_firma_cargadas) return;
+  await Promise.all([
+    cargarScript('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'),
+    cargarScript('https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js')
+  ]);
+  librerias_firma_cargadas = true;
+}
+
+function abrirModalFirmaElectronica() {
+  const registro = correspondencia_cache.find(c => c.id === modal_correspondencia_id);
+  if (!registro || !registro.pdf_generado_url) {
+    alert('Primero genera el PDF del oficio (guárdalo) para poder firmarlo.');
+    return;
+  }
+  document.getElementById('modal-firma-container').innerHTML = `
+    <div class="modal-overlay" style="z-index:1100;" onclick="if(event.target === this) cerrarModalFirma()">
+      <div class="modal-card" style="max-width:440px;">
+        <h3>Firmar electrónicamente</h3>
+        <p style="font-size:12px;color:var(--color-text-muted);">Usa tu certificado de firma electrónica ecuatoriana (archivo .p12). La clave y la contraseña se usan solo en este navegador: no se suben ni se guardan en ningún servidor.</p>
+        <label style="margin-top:10px;">Certificado (.p12)</label>
+        <input type="file" id="firma-p12" accept=".p12,.pfx">
+        <label style="margin-top:10px;">Contraseña del certificado</label>
+        <input type="password" id="firma-password" autocomplete="off">
+        <div id="firma-msg"></div>
+        <div class="modal-acciones">
+          <button class="btn-secondary" onclick="cerrarModalFirma()">Cancelar</button>
+          <button id="firma-btn" onclick="firmarOficioElectronicamente()">Firmar oficio</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function cerrarModalFirma() {
+  document.getElementById('modal-firma-container').innerHTML = '';
+}
+
+async function firmarOficioElectronicamente() {
+  const registro = correspondencia_cache.find(c => c.id === modal_correspondencia_id);
+  const fileP12 = document.getElementById('firma-p12').files[0];
+  const password = document.getElementById('firma-password').value;
+  if (!fileP12) { showMsg('firma-msg', 'Selecciona tu archivo .p12.', 'error'); return; }
+  if (!password) { showMsg('firma-msg', 'Escribe la contraseña del certificado.', 'error'); return; }
+
+  const btn = document.getElementById('firma-btn');
+  btn.disabled = true;
+  showMsg('firma-msg', 'Firmando… esto toma unos segundos.', '');
+
+  try {
+    await cargarLibreriasFirma();
+
+    const { data: pdfBlob, error: errDescarga } = await sb.storage
+      .from('comunicaciones-adjuntos').download(registro.pdf_generado_url);
+    if (errDescarga) throw new Error('No se pudo descargar el PDF generado: ' + errDescarga.message);
+
+    const pdfBytes = await pdfBlob.arrayBuffer();
+    const p12Bytes = await fileP12.arrayBuffer();
+
+    const firmado = await firmarPdfConP12(pdfBytes, p12Bytes, password, {
+      razon: 'Oficio ' + registro.numero_completo + ' - HIDIVO S.A.S.'
+    });
+
+    const ruta = registro.numero_completo.replace(/\./g, '-') + '/' + Date.now() + '-firmado-electronico.pdf';
+    const { error: errSubida } = await sb.storage.from('comunicaciones-adjuntos')
+      .upload(ruta, new Blob([firmado], { type: 'application/pdf' }), { contentType: 'application/pdf' });
+    if (errSubida) throw new Error('Firmado OK pero falló la subida: ' + errSubida.message);
+
+    const { error: errUpdate } = await sb.from('correspondencia')
+      .update({ pdf_firmado_url: ruta }).eq('id', registro.id);
+    if (errUpdate) throw new Error('Firmado y subido, pero no se pudo actualizar el registro: ' + errUpdate.message);
+
+    registro.pdf_firmado_url = ruta;
+    cerrarModalFirma();
+    abrirModalCorrespondencia(registro.id);
+  } catch (e) {
+    const mensaje = /MAC could not be verified|Invalid password/i.test(e.message)
+      ? 'Contraseña del certificado incorrecta.'
+      : 'Error: ' + e.message;
+    showMsg('firma-msg', mensaje, 'error');
+    btn.disabled = false;
+  }
+}
+
+// =====================================================================
+// Firmador de PDF con certificado .p12 (PAdES basic / PKCS#7 detached)
+// Código compatible con navegador: usa los globales PDFLib y forge.
+// La clave privada nunca sale de la máquina del usuario.
+// =====================================================================
+
+const TAMANO_FIRMA = 16384; // bytes reservados para el CMS (hex: x2)
+
+function bytesABinario(bytes) {
+  const CHUNK = 0x8000;
+  const partes = [];
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    partes.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
+  }
+  return partes.join('');
+}
+
+function extraerCredencialesP12(p12Bytes, password) {
+  const p12Der = bytesABinario(new Uint8Array(p12Bytes));
+  const p12Asn1 = forge.asn1.fromDer(p12Der);
+  const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
+
+  let clavePrivada = null;
+  const certificados = [];
+
+  for (const safeContents of p12.safeContents) {
+    for (const safeBag of safeContents.safeBags) {
+      if (safeBag.type === forge.pki.oids.pkcs8ShroudedKeyBag || safeBag.type === forge.pki.oids.keyBag) {
+        if (safeBag.key) clavePrivada = safeBag.key;
+      } else if (safeBag.type === forge.pki.oids.certBag) {
+        if (safeBag.cert) certificados.push(safeBag.cert);
+      }
+    }
+  }
+
+  if (!clavePrivada) throw new Error('El archivo .p12 no contiene una clave privada (o la contraseña es incorrecta).');
+  if (!certificados.length) throw new Error('El archivo .p12 no contiene certificados.');
+
+  // El certificado del firmante es el que corresponde a la clave privada
+  const modClave = clavePrivada.n.toString(16);
+  let certFirmante = certificados.find(c => c.publicKey && c.publicKey.n && c.publicKey.n.toString(16) === modClave);
+  if (!certFirmante) certFirmante = certificados[0];
+
+  return { clavePrivada, certFirmante, certificados };
+}
+
+function nombreDelCertificado(cert) {
+  const cn = cert.subject.getField('CN');
+  return cn ? cn.value : 'Firmante';
+}
+
+async function agregarSelloVisual(pdfDoc, nombreFirmante) {
+  const paginas = pdfDoc.getPages();
+  const pagina = paginas[paginas.length - 1];
+  const fuente = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+  const fuenteBold = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+
+  const x = 40, y = 40, ancho = 240, alto = 52;
+  pagina.drawRectangle({
+    x, y, width: ancho, height: alto,
+    borderColor: PDFLib.rgb(0.047, 0.267, 0.486),
+    borderWidth: 1
+  });
+  const fecha = new Date().toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' });
+  pagina.drawText('FIRMADO ELECTRONICAMENTE POR:', {
+    x: x + 8, y: y + alto - 14, size: 7, font: fuenteBold, color: PDFLib.rgb(0.047, 0.267, 0.486)
+  });
+  pagina.drawText(nombreFirmante.slice(0, 45), {
+    x: x + 8, y: y + alto - 27, size: 9, font: fuenteBold, color: PDFLib.rgb(0.1, 0.1, 0.1)
+  });
+  pagina.drawText('Fecha: ' + fecha, {
+    x: x + 8, y: y + alto - 40, size: 7, font: fuente, color: PDFLib.rgb(0.3, 0.3, 0.3)
+  });
+}
+
+async function prepararPdfConPlaceholder(pdfBytes, nombreFirmante, razon, conSello) {
+  const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+  if (conSello) await agregarSelloVisual(pdfDoc, nombreFirmante);
+
+  const ctx = pdfDoc.context;
+  const byteRange = PDFLib.PDFArray.withContext(ctx);
+  byteRange.push(PDFLib.PDFNumber.of(0));
+  byteRange.push(PDFLib.PDFName.of('**********'));
+  byteRange.push(PDFLib.PDFName.of('**********'));
+  byteRange.push(PDFLib.PDFName.of('**********'));
+
+  const sigDict = ctx.obj({
+    Type: 'Sig',
+    Filter: 'Adobe.PPKLite',
+    SubFilter: 'adbe.pkcs7.detached',
+    ByteRange: byteRange,
+    Contents: PDFLib.PDFHexString.of('0'.repeat(TAMANO_FIRMA * 2)),
+    Reason: PDFLib.PDFString.of(razon || 'Documento oficial HIDIVO'),
+    M: PDFLib.PDFString.fromDate(new Date()),
+    Name: PDFLib.PDFString.of(nombreFirmante)
+  });
+  const sigDictRef = ctx.register(sigDict);
+
+  const paginas = pdfDoc.getPages();
+  const primeraPagina = paginas[0];
+  const widget = ctx.obj({
+    Type: 'Annot',
+    Subtype: 'Widget',
+    FT: 'Sig',
+    Rect: [0, 0, 0, 0],
+    V: sigDictRef,
+    T: PDFLib.PDFString.of('FirmaHIDIVO1'),
+    F: 4,
+    P: primeraPagina.ref
+  });
+  const widgetRef = ctx.register(widget);
+
+  const annots = primeraPagina.node.lookupMaybe(PDFLib.PDFName.of('Annots'), PDFLib.PDFArray);
+  if (annots) {
+    annots.push(widgetRef);
+  } else {
+    primeraPagina.node.set(PDFLib.PDFName.of('Annots'), ctx.obj([widgetRef]));
+  }
+
+  let acroForm = pdfDoc.catalog.lookupMaybe(PDFLib.PDFName.of('AcroForm'), PDFLib.PDFDict);
+  if (!acroForm) {
+    acroForm = ctx.obj({ SigFlags: 3, Fields: [widgetRef] });
+    pdfDoc.catalog.set(PDFLib.PDFName.of('AcroForm'), ctx.register(acroForm));
+  } else {
+    acroForm.set(PDFLib.PDFName.of('SigFlags'), PDFLib.PDFNumber.of(3));
+    const fields = acroForm.lookupMaybe(PDFLib.PDFName.of('Fields'), PDFLib.PDFArray);
+    if (fields) fields.push(widgetRef);
+    else acroForm.set(PDFLib.PDFName.of('Fields'), ctx.obj([widgetRef]));
+  }
+
+  return pdfDoc.save({ useObjectStreams: false });
+}
+
+function firmarBytesConPlaceholder(pdfConPlaceholder, clavePrivada, certFirmante, certificados) {
+  let pdf = pdfConPlaceholder instanceof Uint8Array ? pdfConPlaceholder : new Uint8Array(pdfConPlaceholder);
+  const binario = bytesABinario(pdf);
+
+  // Ubicar el placeholder de Contents (la cadena de ceros en hex)
+  const marcaContents = '0'.repeat(TAMANO_FIRMA * 2);
+  const idxContents = binario.indexOf('<' + marcaContents + '>');
+  if (idxContents < 0) throw new Error('No se encontró el placeholder de firma en el PDF.');
+  const inicioContents = idxContents;                 // posición del '<'
+  const finContents = idxContents + marcaContents.length + 2; // después del '>'
+
+  // Ubicar y reescribir el ByteRange
+  const marcaByteRange = '/ByteRange [ 0 /********** /********** /********** ]';
+  const idxByteRange = binario.indexOf(marcaByteRange);
+  if (idxByteRange < 0) throw new Error('No se encontró el placeholder de ByteRange.');
+
+  const byteRange = [0, inicioContents, finContents, pdf.length - finContents];
+  let nuevoByteRange = '/ByteRange [ ' + byteRange.join(' ') + ' ]';
+  if (nuevoByteRange.length > marcaByteRange.length) throw new Error('ByteRange excede el espacio reservado.');
+  nuevoByteRange += ' '.repeat(marcaByteRange.length - nuevoByteRange.length);
+
+  const encoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+  const brBytes = encoder ? encoder.encode(nuevoByteRange) : Uint8Array.from(nuevoByteRange, c => c.charCodeAt(0));
+  pdf.set(brBytes, idxByteRange);
+
+  // Datos a firmar: todo excepto el hueco de Contents
+  const parte1 = pdf.subarray(0, inicioContents);
+  const parte2 = pdf.subarray(finContents);
+  const datosAFirmar = bytesABinario(parte1) + bytesABinario(parte2);
+
+  // Construir PKCS#7 detached con atributos autenticados (SHA-256)
+  const p7 = forge.pkcs7.createSignedData();
+  p7.content = forge.util.createBuffer(datosAFirmar);
+  for (const cert of certificados) p7.addCertificate(cert);
+  p7.addSigner({
+    key: clavePrivada,
+    certificate: certFirmante,
+    digestAlgorithm: forge.pki.oids.sha256,
+    authenticatedAttributes: [
+      { type: forge.pki.oids.contentType, value: forge.pki.oids.data },
+      { type: forge.pki.oids.messageDigest },
+      { type: forge.pki.oids.signingTime, value: new Date() }
+    ]
+  });
+  p7.sign({ detached: true });
+
+  const der = forge.asn1.toDer(p7.toAsn1()).getBytes();
+  if (der.length > TAMANO_FIRMA) throw new Error('La firma generada excede el espacio reservado (' + der.length + ' bytes).');
+
+  let hexFirma = '';
+  for (let i = 0; i < der.length; i++) {
+    hexFirma += ('0' + der.charCodeAt(i).toString(16)).slice(-2);
+  }
+  hexFirma += '0'.repeat(TAMANO_FIRMA * 2 - hexFirma.length);
+
+  const hexBytes = encoder ? encoder.encode(hexFirma) : Uint8Array.from(hexFirma, c => c.charCodeAt(0));
+  pdf.set(hexBytes, inicioContents + 1);
+
+  return pdf;
+}
+
+async function firmarPdfConP12(pdfBytes, p12Bytes, password, opciones) {
+  const op = opciones || {};
+  const { clavePrivada, certFirmante, certificados } = extraerCredencialesP12(p12Bytes, password);
+  const nombre = op.nombre || nombreDelCertificado(certFirmante);
+  const conPlaceholder = await prepararPdfConPlaceholder(pdfBytes, nombre, op.razon, op.sello !== false);
+  return firmarBytesConPlaceholder(conPlaceholder, clavePrivada, certFirmante, certificados);
 }
 
 async function subirPdfFirmadoCorrespondencia(file) {
