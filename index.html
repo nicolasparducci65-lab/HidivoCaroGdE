@@ -3466,7 +3466,7 @@ function pintarCuentasGrid() {
       <div class="saldo">$${formatearMoneda(c.saldo_actual || 0)}</div>
     </div>
   `).join('') + `
-    <div class="cuenta-card add-new" onclick="abrirModalCuenta()">+ Agregar cuenta bancaria</div>
+    <div class="cuenta-card add-new" onclick="abrirModalCuentaBancaria()">+ Agregar cuenta bancaria</div>
   `;
 }
 
@@ -3488,7 +3488,7 @@ function pintarMovimientos() {
   `).join('');
 }
 
-function abrirModalCuenta() {
+function abrirModalCuentaBancaria() {
   document.getElementById('modal-container').innerHTML = `
     <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
       <div class="modal-card">
@@ -3504,14 +3504,14 @@ function abrirModalCuenta() {
         <div id="cuenta-msg"></div>
         <div class="modal-actions">
           <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-          <button class="btn" onclick="guardarCuenta()">Guardar</button>
+          <button class="btn" onclick="guardarCuentaBancaria()">Guardar</button>
         </div>
       </div>
     </div>
   `;
 }
 
-async function guardarCuenta() {
+async function guardarCuentaBancaria() {
   const nombre = document.getElementById('cuenta-nombre').value.trim();
   if (!nombre) {
     showMsg('cuenta-msg', 'El nombre es obligatorio.', 'error');
