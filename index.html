@@ -5845,7 +5845,8 @@ async function cargarLibreriasFirma() {
   if (librerias_firma_cargadas) return;
   await Promise.all([
     cargarScript('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'),
-    cargarScript('https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js')
+    cargarScript('https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js'),
+    cargarScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js')
   ]);
   librerias_firma_cargadas = true;
 }
@@ -5931,6 +5932,12 @@ async function firmarOficioElectronicamente() {
 // La clave privada nunca sale de la máquina del usuario.
 // =====================================================================
 
+// =====================================================================
+// Firmador de PDF con certificado .p12 (PAdES basic / PKCS#7 detached)
+// Código compatible con navegador: usa los globales PDFLib y forge.
+// La clave privada nunca sale de la máquina del usuario.
+// =====================================================================
+
 const TAMANO_FIRMA = 16384; // bytes reservados para el CMS (hex: x2)
 
 function bytesABinario(bytes) {
@@ -5976,33 +5983,94 @@ function nombreDelCertificado(cert) {
   return cn ? cn.value : 'Firmante';
 }
 
-async function agregarSelloVisual(pdfDoc, nombreFirmante) {
+function partirNombre(nombre, maxChars) {
+  const palabras = nombre.split(/\s+/);
+  const lineas = [];
+  let actual = '';
+  for (const p of palabras) {
+    if ((actual + ' ' + p).trim().length > maxChars && actual) {
+      lineas.push(actual);
+      actual = p;
+    } else {
+      actual = (actual + ' ' + p).trim();
+    }
+  }
+  if (actual) lineas.push(actual);
+  return lineas.slice(0, 3);
+}
+
+async function agregarSelloVisual(pdfDoc, nombreFirmante, razon) {
   const paginas = pdfDoc.getPages();
   const pagina = paginas[paginas.length - 1];
   const fuente = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
   const fuenteBold = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
 
-  const x = 40, y = 40, ancho = 240, alto = 52;
+  const fechaIso = new Date().toISOString();
+  const fechaLocal = new Date().toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' });
+
+  // QR con los datos de la firma, al estilo FirmaEC
+  const contenidoQR = 'FIRMADO POR: ' + nombreFirmante + '\n' +
+    'RAZON: ' + (razon || 'Documento HIDIVO S.A.S.') + '\n' +
+    'FECHA: ' + fechaIso + '\n' +
+    'VALIDAR UNICAMENTE EN FIRMAEC www.firmadigital.gob.ec';
+  const qr = qrcode(0, 'M');
+  qr.addData(contenidoQR);
+  qr.make();
+  const nModulos = qr.getModuleCount();
+
+  const x = 40, y = 55, alto = 62, ancho = 250;
+  const ladoQR = 54;
+  const xQR = x + 4, yQR = y + (alto - ladoQR) / 2;
+  const celda = ladoQR / nModulos;
+
   pagina.drawRectangle({
     x, y, width: ancho, height: alto,
     borderColor: PDFLib.rgb(0.047, 0.267, 0.486),
-    borderWidth: 1
+    borderWidth: 1,
+    color: PDFLib.rgb(1, 1, 1)
   });
-  const fecha = new Date().toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' });
-  pagina.drawText('FIRMADO ELECTRONICAMENTE POR:', {
-    x: x + 8, y: y + alto - 14, size: 7, font: fuenteBold, color: PDFLib.rgb(0.047, 0.267, 0.486)
+
+  // Fondo blanco del QR y módulos (pdf-lib dibuja desde abajo: invertir fila)
+  pagina.drawRectangle({ x: xQR, y: yQR, width: ladoQR, height: ladoQR, color: PDFLib.rgb(1, 1, 1) });
+  for (let f = 0; f < nModulos; f++) {
+    for (let c = 0; c < nModulos; c++) {
+      if (qr.isDark(f, c)) {
+        pagina.drawRectangle({
+          x: xQR + c * celda,
+          y: yQR + (nModulos - 1 - f) * celda,
+          width: celda + 0.05,
+          height: celda + 0.05,
+          color: PDFLib.rgb(0, 0, 0)
+        });
+      }
+    }
+  }
+
+  const xTexto = xQR + ladoQR + 7;
+  let yTexto = y + alto - 11;
+  pagina.drawText('Validar únicamente en FirmaEC.', {
+    x: xTexto, y: yTexto, size: 6.5, font: fuente, color: PDFLib.rgb(0.25, 0.25, 0.25)
   });
-  pagina.drawText(nombreFirmante.slice(0, 45), {
-    x: x + 8, y: y + alto - 27, size: 9, font: fuenteBold, color: PDFLib.rgb(0.1, 0.1, 0.1)
+  yTexto -= 9;
+  pagina.drawText('Firmado electrónicamente por:', {
+    x: xTexto, y: yTexto, size: 6.5, font: fuente, color: PDFLib.rgb(0.25, 0.25, 0.25)
   });
-  pagina.drawText('Fecha: ' + fecha, {
-    x: x + 8, y: y + alto - 40, size: 7, font: fuente, color: PDFLib.rgb(0.3, 0.3, 0.3)
+  yTexto -= 11;
+  const lineasNombre = partirNombre(nombreFirmante.toUpperCase(), 22);
+  for (const linea of lineasNombre) {
+    pagina.drawText(linea, {
+      x: xTexto, y: yTexto, size: 9, font: fuenteBold, color: PDFLib.rgb(0, 0, 0)
+    });
+    yTexto -= 10;
+  }
+  pagina.drawText('Fecha: ' + fechaLocal, {
+    x: xTexto, y: Math.max(yTexto, y + 5), size: 6, font: fuente, color: PDFLib.rgb(0.3, 0.3, 0.3)
   });
 }
 
 async function prepararPdfConPlaceholder(pdfBytes, nombreFirmante, razon, conSello) {
   const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
-  if (conSello) await agregarSelloVisual(pdfDoc, nombreFirmante);
+  if (conSello) await agregarSelloVisual(pdfDoc, nombreFirmante, razon);
 
   const ctx = pdfDoc.context;
   const byteRange = PDFLib.PDFArray.withContext(ctx);
