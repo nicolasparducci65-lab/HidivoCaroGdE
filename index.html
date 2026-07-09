@@ -3389,6 +3389,7 @@ async function renderTesoreria() {
     </div>
     <div class="subtabs-bar" id="tesoreria-subtabs">
       <button data-tab="movimientos" class="active">Movimientos</button>
+      <button data-tab="conciliacion">Conciliación</button>
       <button data-tab="nomina">Nómina</button>
     </div>
     <div id="tesoreria-content"></div>
@@ -3401,6 +3402,7 @@ async function renderTesoreria() {
     btn.classList.add('active');
     tesoreria_subtab = btn.dataset.tab;
     if (tesoreria_subtab === 'movimientos') renderTabMovimientos();
+    else if (tesoreria_subtab === 'conciliacion') renderTabConciliacion();
     else renderTabNomina();
   });
 
@@ -3608,6 +3610,283 @@ async function guardarMovimiento() {
 const TIPO_PERSONAL_LABELS = { planta_fija: 'Planta fija', por_proyecto: 'Por proyecto' };
 let empleados_cache = [];
 let roles_pago_cache = [];
+
+// ---- Sub-tab: Conciliación bancaria (fase 1: Produbanco TXT) ----
+
+let extracto_cache = [];
+let conciliacion_movs_cache = [];
+let conciliacion_filtro = 'pendiente';
+let conciliacion_cuenta_id = '';
+
+const CATEGORIAS_NO_APLICA = ['Comisión bancaria', 'Impuestos', 'Intereses', 'Transferencia entre cuentas propias', 'Otro'];
+
+async function renderTabConciliacion() {
+  const content = document.getElementById('tesoreria-content');
+  if (!conciliacion_cuenta_id && cuentas_bancarias_cache.length) conciliacion_cuenta_id = cuentas_bancarias_cache[0].id;
+
+  content.innerHTML = `
+    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:10px;padding:16px;margin-bottom:16px;">
+      <h2 style="font-size:15px;margin-bottom:10px;">Importar extracto de Produbanco (TXT)</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="min-width:220px;">
+          <label>Cuenta bancaria</label>
+          <select id="conc-cuenta" onchange="conciliacion_cuenta_id=this.value; cargarExtracto();">
+            ${cuentas_bancarias_cache.map(c => '<option value="' + c.id + '"' + (c.id === conciliacion_cuenta_id ? ' selected' : '') + '>' + escapeHtml(c.nombre) + '</option>').join('')}
+          </select>
+        </div>
+        <div>
+          <label>Archivo TXT del banco</label>
+          <input type="file" id="conc-archivo" accept=".txt">
+        </div>
+        <button class="btn" onclick="importarExtractoProdubanco()">Importar</button>
+      </div>
+      <div id="conc-msg"></div>
+    </div>
+
+    <div class="filter-pills" id="conc-filtros">
+      <button data-estado="pendiente" class="active">Pendientes</button>
+      <button data-estado="conciliado">Conciliados</button>
+      <button data-estado="no_aplica">No aplica</button>
+    </div>
+
+    <div style="overflow-x:auto;">
+    <table class="data-table" style="font-size:12px;">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Referencia</th>
+          <th>Descripción</th>
+          <th>Monto</th>
+          <th style="min-width:340px;">Conciliación</th>
+        </tr>
+      </thead>
+      <tbody id="conc-tbody"><tr><td colspan="5">Selecciona una cuenta e importa un extracto.</td></tr></tbody>
+    </table>
+    </div>
+
+    <div id="conc-libro-pendiente" style="margin-top:24px;"></div>
+  `;
+
+  document.getElementById('conc-filtros').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    document.querySelectorAll('#conc-filtros button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    conciliacion_filtro = btn.dataset.estado;
+    pintarExtracto();
+  });
+
+  if (conciliacion_cuenta_id) await cargarExtracto();
+}
+
+async function leerArchivoComoTexto(file) {
+  const buffer = await file.arrayBuffer();
+  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+  if (utf8.includes('\uFFFD')) {
+    return new TextDecoder('iso-8859-1').decode(buffer);
+  }
+  return utf8;
+}
+
+function parsearExtractoProdubanco(texto) {
+  const lineas = texto.split(/\r?\n/);
+  const filas = [];
+  const errores = [];
+  let enDatos = false;
+
+  for (const linea of lineas) {
+    if (!enDatos) {
+      if (/^FECHA\s+REFERENCIA/i.test(linea.trim())) enDatos = true;
+      continue;
+    }
+    if (!linea.trim()) continue;
+    const campos = linea.split('\t').map(c => c.trim());
+    if (campos.length < 6) { errores.push(linea.slice(0, 60)); continue; }
+
+    const fechaHora = campos[0];
+    const m = fechaHora.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}:\d{2}))?/);
+    if (!m) { errores.push(linea.slice(0, 60)); continue; }
+    const fechaIso = m[3] + '-' + m[1] + '-' + m[2];
+
+    const signo = campos[3];
+    const monto = parseFloat(campos[4]);
+    if ((signo !== '+' && signo !== '-') || isNaN(monto)) { errores.push(linea.slice(0, 60)); continue; }
+
+    filas.push({
+      fecha: fechaIso,
+      hora: m[4] || null,
+      referencia: campos[1] || null,
+      descripcion: campos[2] || null,
+      tipo: signo === '+' ? 'credito' : 'debito',
+      monto: monto,
+      saldo_contable: parseFloat(campos[5]) || null,
+      oficina: campos[7] || null
+    });
+  }
+  return { filas, errores };
+}
+
+async function importarExtractoProdubanco() {
+  showMsg('conc-msg', '', '');
+  const file = document.getElementById('conc-archivo').files[0];
+  if (!conciliacion_cuenta_id) { showMsg('conc-msg', 'Primero registra una cuenta bancaria en la pestaña Movimientos.', 'error'); return; }
+  if (!file) { showMsg('conc-msg', 'Selecciona el archivo TXT descargado de Produbanco.', 'error'); return; }
+
+  const texto = await leerArchivoComoTexto(file);
+  const { filas, errores } = parsearExtractoProdubanco(texto);
+
+  if (!filas.length) {
+    showMsg('conc-msg', 'No se encontraron movimientos en el archivo. Verifica que sea el TXT de Produbanco (tipo de visualización "Texto").', 'error');
+    return;
+  }
+
+  const registros = filas.map(f => ({
+    ...f,
+    cuenta_id: conciliacion_cuenta_id,
+    clave_dedup: conciliacion_cuenta_id + '|' + f.fecha + '|' + (f.referencia || '') + '|' + f.tipo + '|' + f.monto.toFixed(2)
+  }));
+
+  const { data: insertados, error } = await sb
+    .from('banco_extracto_movimientos')
+    .upsert(registros, { onConflict: 'clave_dedup', ignoreDuplicates: true })
+    .select('id');
+
+  if (error) { showMsg('conc-msg', 'Error importando: ' + error.message, 'error'); return; }
+
+  const nuevos = (insertados || []).length;
+  const duplicados = registros.length - nuevos;
+  showMsg('conc-msg', 'Importados ' + nuevos + ' movimiento(s) nuevos. ' +
+    (duplicados ? duplicados + ' ya existían y se omitieron. ' : '') +
+    (errores.length ? errores.length + ' línea(s) no se pudieron leer.' : ''), 'ok');
+  document.getElementById('conc-archivo').value = '';
+  await cargarExtracto();
+}
+
+async function cargarExtracto() {
+  const [extractoRes, movsRes] = await Promise.all([
+    sb.from('banco_extracto_movimientos').select('*').eq('cuenta_id', conciliacion_cuenta_id).order('fecha', { ascending: false }).order('created_at', { ascending: false }),
+    sb.from('tesoreria_movimientos').select('*').eq('cuenta_id', conciliacion_cuenta_id).order('fecha', { ascending: false })
+  ]);
+  extracto_cache = extractoRes.data || [];
+  conciliacion_movs_cache = movsRes.data || [];
+  pintarExtracto();
+}
+
+function sugerenciasParaExtracto(ext) {
+  const vinculados = new Set(extracto_cache.filter(e => e.movimiento_tesoreria_id).map(e => e.movimiento_tesoreria_id));
+  const tipoLibro = ext.tipo === 'credito' ? 'ingreso' : 'egreso';
+  const fechaExt = new Date(ext.fecha);
+  return conciliacion_movs_cache.filter(mov => {
+    if (vinculados.has(mov.id)) return false;
+    if (mov.tipo !== tipoLibro) return false;
+    if (Math.abs(Number(mov.monto) - Number(ext.monto)) > 0.009) return false;
+    const dias = Math.abs((new Date(mov.fecha) - fechaExt) / 86400000);
+    return dias <= 5;
+  });
+}
+
+function pintarExtracto() {
+  const tbody = document.getElementById('conc-tbody');
+  if (!tbody) return;
+  const lista = extracto_cache.filter(e => e.estado === conciliacion_filtro);
+
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--color-text-muted);">' +
+      (conciliacion_filtro === 'pendiente' ? 'No hay movimientos pendientes de conciliar en esta cuenta.' : 'Nada en esta vista.') + '</td></tr>';
+  } else {
+    tbody.innerHTML = lista.map(ext => {
+      const montoHtml = '<span style="color:' + (ext.tipo === 'credito' ? 'var(--color-success)' : 'var(--color-danger)') + ';font-weight:600;">' +
+        (ext.tipo === 'credito' ? '+' : '−') + '$' + formatearMoneda(ext.monto) + '</span>';
+      let accion = '';
+
+      if (ext.estado === 'pendiente') {
+        const sugs = sugerenciasParaExtracto(ext);
+        const selCat = '<select id="cat-' + ext.id + '" style="font-size:11px;padding:5px;max-width:150px;">' +
+          CATEGORIAS_NO_APLICA.map(c => '<option>' + c + '</option>').join('') + '</select> ' +
+          '<a onclick="marcarNoAplica(\'' + ext.id + '\')">No aplica</a>';
+        if (sugs.length) {
+          const selMov = '<select id="sug-' + ext.id + '" style="font-size:11px;padding:5px;max-width:220px;">' +
+            sugs.map(s => '<option value="' + s.id + '">' + s.fecha + ' — ' + escapeHtml((s.descripcion || 'Movimiento').slice(0, 40)) + '</option>').join('') + '</select> ' +
+            '<a onclick="vincularExtracto(\'' + ext.id + '\')" style="font-weight:600;">Vincular</a>';
+          accion = '<div>' + selMov + '</div><div style="margin-top:6px;">' + selCat + '</div>';
+        } else {
+          accion = '<div style="color:var(--color-text-muted);font-size:11px;">Sin coincidencia en el libro</div><div style="margin-top:6px;">' + selCat + '</div>';
+        }
+      } else if (ext.estado === 'conciliado') {
+        const mov = conciliacion_movs_cache.find(m => m.id === ext.movimiento_tesoreria_id);
+        accion = '<span style="color:var(--color-success);">✓ ' + (mov ? escapeHtml((mov.descripcion || 'Movimiento').slice(0, 40)) + ' (' + mov.fecha + ')' : 'Vinculado') + '</span> ' +
+          '<a onclick="deshacerConciliacion(\'' + ext.id + '\')">Deshacer</a>';
+      } else {
+        accion = '<span style="color:var(--color-text-muted);">' + escapeHtml(ext.categoria_no_aplica || 'No aplica') + '</span> ' +
+          '<a onclick="deshacerConciliacion(\'' + ext.id + '\')">Deshacer</a>';
+      }
+
+      return '<tr>' +
+        '<td>' + ext.fecha + (ext.hora ? '<br><span style="font-size:10px;color:var(--color-text-muted);">' + ext.hora + '</span>' : '') + '</td>' +
+        '<td style="font-size:11px;">' + escapeHtml(ext.referencia || '—') + '</td>' +
+        '<td>' + escapeHtml(ext.descripcion || '—') + '</td>' +
+        '<td>' + montoHtml + '</td>' +
+        '<td>' + accion + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  pintarLibroSinConciliar();
+}
+
+function pintarLibroSinConciliar() {
+  const cont = document.getElementById('conc-libro-pendiente');
+  if (!cont) return;
+  if (!extracto_cache.length) { cont.innerHTML = ''; return; }
+
+  const fechas = extracto_cache.map(e => e.fecha).sort();
+  const desde = fechas[0], hasta = fechas[fechas.length - 1];
+  const vinculados = new Set(extracto_cache.filter(e => e.movimiento_tesoreria_id).map(e => e.movimiento_tesoreria_id));
+  const sinRespaldo = conciliacion_movs_cache.filter(m => m.fecha >= desde && m.fecha <= hasta && !vinculados.has(m.id));
+
+  if (!sinRespaldo.length) {
+    cont.innerHTML = '<p style="font-size:12px;color:var(--color-success);">✓ Todos los movimientos del libro entre ' + desde + ' y ' + hasta + ' tienen respaldo en el extracto.</p>';
+    return;
+  }
+  cont.innerHTML = `
+    <h2 style="font-size:15px;">Movimientos del libro sin respaldo en el extracto (${desde} a ${hasta})</h2>
+    <p style="font-size:12px;color:var(--color-text-muted);">Registrados en Tesorería/Cartera pero sin línea del banco vinculada. Revisa si el pago realmente ocurrió o si falta importar otro rango.</p>
+    <table class="data-table" style="font-size:12px;">
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Monto</th></tr></thead>
+      <tbody>
+        ${sinRespaldo.map(m => '<tr><td>' + m.fecha + '</td><td>' + (m.tipo === 'ingreso' ? 'Ingreso' : 'Egreso') + '</td><td>' + escapeHtml(m.descripcion || '—') + '</td><td>$' + formatearMoneda(m.monto) + '</td></tr>').join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function vincularExtracto(extractoId) {
+  const sel = document.getElementById('sug-' + extractoId);
+  if (!sel || !sel.value) return;
+  const { error } = await sb.from('banco_extracto_movimientos')
+    .update({ estado: 'conciliado', movimiento_tesoreria_id: sel.value, categoria_no_aplica: null })
+    .eq('id', extractoId);
+  if (error) { alert('Error vinculando: ' + error.message); return; }
+  await cargarExtracto();
+}
+
+async function marcarNoAplica(extractoId) {
+  const sel = document.getElementById('cat-' + extractoId);
+  const categoria = sel ? sel.value : 'Otro';
+  const { error } = await sb.from('banco_extracto_movimientos')
+    .update({ estado: 'no_aplica', categoria_no_aplica: categoria, movimiento_tesoreria_id: null })
+    .eq('id', extractoId);
+  if (error) { alert('Error: ' + error.message); return; }
+  await cargarExtracto();
+}
+
+async function deshacerConciliacion(extractoId) {
+  const { error } = await sb.from('banco_extracto_movimientos')
+    .update({ estado: 'pendiente', movimiento_tesoreria_id: null, categoria_no_aplica: null })
+    .eq('id', extractoId);
+  if (error) { alert('Error: ' + error.message); return; }
+  await cargarExtracto();
+}
 
 async function renderTabNomina() {
   const content = document.getElementById('tesoreria-content');
