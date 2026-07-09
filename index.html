@@ -1035,6 +1035,7 @@
         <a href="#" data-module="chat">Chat</a>
       </nav>
       <div style="padding: 20px; margin-top: auto;">
+        <button onclick="abrirModalPassword()" style="background: transparent; color: var(--color-text-muted); border: 1px solid var(--color-border); margin-bottom: 8px;">Cambiar contraseña</button>
         <button id="btn-logout" style="background: var(--color-border); color: var(--color-text);">Cerrar sesión</button>
       </div>
     </aside>
@@ -2701,7 +2702,10 @@ async function renderCartera() {
   main.innerHTML = `
     <div class="module-header">
       <h2>Cartera</h2>
-      <button class="btn" onclick="abrirModalCartera()">+ Nuevo documento</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" style="background: transparent; color: var(--color-text); border: 1px solid var(--color-border);" onclick="abrirAntiguedadSaldos()">Antigüedad de saldos</button>
+        <button class="btn" onclick="abrirModalCartera()">+ Nuevo documento</button>
+      </div>
     </div>
     <div class="filter-pills" id="cartera-filtros">
       <button data-tipo="por_cobrar" class="active">Por cobrar</button>
@@ -2796,6 +2800,85 @@ function pintarCartera() {
       </tr>
     `;
   }).join('');
+}
+
+function bucketAntiguedad(fechaVenc, hoy) {
+  if (!fechaVenc || fechaVenc >= hoy) return 0;
+  const dias = Math.floor((new Date(hoy) - new Date(fechaVenc)) / 86400000);
+  if (dias <= 30) return 1;
+  if (dias <= 60) return 2;
+  if (dias <= 90) return 3;
+  return 4;
+}
+
+function abrirAntiguedadSaldos() {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const esCxC = cartera_filtro_tipo === 'por_cobrar';
+  const lista = cartera_cache.filter(d => d.tipo === cartera_filtro_tipo && d.estado !== 'pagado' && Number(d.saldo_pendiente || 0) > 0.009);
+
+  const grupos = {};
+  lista.forEach(d => {
+    const nombre = d.clientes?.razon_social || d.proveedores?.razon_social || 'Sin asignar';
+    if (!grupos[nombre]) grupos[nombre] = [0, 0, 0, 0, 0];
+    grupos[nombre][bucketAntiguedad(d.fecha_vencimiento, hoy)] += Number(d.saldo_pendiente || 0);
+  });
+
+  const nombres = Object.keys(grupos).sort((a, b) => {
+    const ta = grupos[a].reduce((x, y) => x + y, 0);
+    const tb = grupos[b].reduce((x, y) => x + y, 0);
+    return tb - ta;
+  });
+  const totales = [0, 0, 0, 0, 0];
+  nombres.forEach(n => grupos[n].forEach((v, i) => totales[i] += v));
+  const granTotal = totales.reduce((x, y) => x + y, 0);
+
+  const celdas = (vals) => vals.map((v, i) =>
+    '<td style="text-align:right;' + (i >= 3 && v > 0.009 ? 'color:var(--color-danger);font-weight:600;' : '') + '">' + (v > 0.009 ? '$' + formatearMoneda(v) : '—') + '</td>'
+  ).join('');
+
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card" style="max-width:820px;">
+        <h3>Antigüedad de saldos — ${esCxC ? 'Por cobrar' : 'Por pagar'}</h3>
+        <p style="font-size:13px;color:var(--color-text-muted);">Saldos pendientes agrupados por ${esCxC ? 'cliente' : 'proveedor'} según los días vencidos desde la fecha de vencimiento, al ${hoy}.</p>
+        <div style="overflow-x:auto;">
+        <table class="data-table" style="font-size:12px;margin-top:10px;">
+          <thead>
+            <tr>
+              <th>${esCxC ? 'Cliente' : 'Proveedor'}</th>
+              <th style="text-align:right;">Por vencer</th>
+              <th style="text-align:right;">1-30 días</th>
+              <th style="text-align:right;">31-60 días</th>
+              <th style="text-align:right;">61-90 días</th>
+              <th style="text-align:right;">+90 días</th>
+              <th style="text-align:right;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${nombres.length ? nombres.map(n => `
+              <tr>
+                <td>${escapeHtml(n)}</td>
+                ${celdas(grupos[n])}
+                <td style="text-align:right;font-weight:600;">$${formatearMoneda(grupos[n].reduce((x, y) => x + y, 0))}</td>
+              </tr>
+            `).join('') : '<tr><td colspan="7" style="color:var(--color-text-muted);">No hay saldos pendientes en esta vista.</td></tr>'}
+          </tbody>
+          ${nombres.length ? `
+          <tfoot>
+            <tr style="background:var(--color-bg);font-weight:600;">
+              <td>Total</td>
+              ${celdas(totales)}
+              <td style="text-align:right;">$${formatearMoneda(granTotal)}</td>
+            </tr>
+          </tfoot>` : ''}
+        </table>
+        </div>
+        <div class="modal-acciones">
+          <button class="btn-secondary" onclick="closeModal()">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function pintarResumenCartera(lista) {
@@ -7147,6 +7230,38 @@ async function descartarComprobanteSri(id, descartar) {
 // DASHBOARD DE BIENVENIDA (pantalla de inicio)
 // =====================================================================
 
+function abrirModalPassword() {
+  cerrarSidebarMobile();
+  document.getElementById('modal-container').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target === this) closeModal()">
+      <div class="modal-card" style="max-width:420px;">
+        <h3>Cambiar contraseña</h3>
+        <p style="font-size:13px;color:var(--color-text-muted);">Define una nueva contraseña para tu cuenta. La usarás la próxima vez que inicies sesión.</p>
+        <label style="margin-top:12px;">Nueva contraseña</label>
+        <input type="password" id="pass-nueva" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+        <label style="margin-top:10px;">Repite la contraseña</label>
+        <input type="password" id="pass-confirma" placeholder="Escríbela otra vez" autocomplete="new-password">
+        <div id="pass-msg"></div>
+        <div class="modal-acciones">
+          <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button onclick="guardarNuevaPassword()">Guardar contraseña</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarNuevaPassword() {
+  const nueva = document.getElementById('pass-nueva').value;
+  const confirma = document.getElementById('pass-confirma').value;
+  if (nueva.length < 6) { showMsg('pass-msg', 'La contraseña debe tener al menos 6 caracteres.', 'error'); return; }
+  if (nueva !== confirma) { showMsg('pass-msg', 'Las contraseñas no coinciden.', 'error'); return; }
+  const { error } = await sb.auth.updateUser({ password: nueva });
+  if (error) { showMsg('pass-msg', 'Error: ' + error.message, 'error'); return; }
+  showMsg('pass-msg', 'Contraseña actualizada correctamente.', 'ok');
+  setTimeout(closeModal, 1500);
+}
+
 async function renderDashboardInicio() {
   const main = document.getElementById('main-content');
 
@@ -7179,11 +7294,12 @@ async function cargarResumenDashboard() {
   const hoy = new Date().toISOString().slice(0, 10);
   const en7dias = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const [carteraRes, correspondenciaRes, correspondenciaPendienteRes, cuentasRes] = await Promise.all([
+  const [carteraRes, correspondenciaRes, correspondenciaPendienteRes, cuentasRes, sriRes] = await Promise.all([
     sb.from('cartera_documentos').select('tipo, saldo_pendiente, fecha_vencimiento, estado').neq('estado', 'pagado'),
     sb.from('correspondencia').select('id').eq('direccion', 'enviada').eq('enviado_por_correo', false),
     sb.from('correspondencia').select('direccion').eq('estado_respuesta', 'pendiente'),
-    sb.from('cuentas_bancarias').select('saldo_actual')
+    sb.from('cuentas_bancarias').select('saldo_actual'),
+    sb.from('sri_comprobantes').select('estado').in('estado', ['pendiente', 'asignado', 'en_revision'])
   ]);
 
   const cartera = carteraRes.data || [];
@@ -7197,6 +7313,14 @@ async function cargarResumenDashboard() {
   const recibidasPendientes = pendientesPorDireccion.filter(c => c.direccion === 'recibida').length;
   const enviadasPendientes = pendientesPorDireccion.filter(c => c.direccion === 'enviada').length;
   const saldoTotalCuentas = (cuentasRes.data || []).reduce((acc, c) => acc + Number(c.saldo_actual || 0), 0);
+  const sriEstados = sriRes.data || [];
+  const sriPorAsignar = sriEstados.filter(c => c.estado === 'pendiente').length;
+  const sriEnClasificacion = sriEstados.filter(c => c.estado === 'asignado').length;
+  const sriPorAprobar = sriEstados.filter(c => c.estado === 'en_revision').length;
+  const sriTotal = sriEstados.length;
+  const sriDetalle = sriTotal
+    ? [sriPorAsignar ? sriPorAsignar + ' por asignar' : '', sriEnClasificacion ? sriEnClasificacion + ' en clasificación' : '', sriPorAprobar ? sriPorAprobar + ' por aprobar' : ''].filter(Boolean).join(' · ')
+    : 'Todo comprobante está clasificado';
 
   const grid = document.getElementById('dashboard-grid');
   grid.innerHTML = `
@@ -7222,6 +7346,12 @@ async function cargarResumenDashboard() {
       <div class="titulo">Saldo pendiente por pagar</div>
       <div class="valor">$${formatearMoneda(totalPendienteCxP)}</div>
       <div class="detalle">Total en documentos CxP abiertos</div>
+    </div>
+
+    <div class="dashboard-card ${sriTotal ? 'alerta' : 'ok'}" onclick="irADashboardModulo('costos', 'sri')">
+      <div class="titulo">Comprobantes SRI en proceso</div>
+      <div class="valor">${sriTotal}</div>
+      <div class="detalle">${sriDetalle}</div>
     </div>
 
     <div class="dashboard-card ${correspondenciaSinEnviar ? 'alerta' : 'ok'}" onclick="irADashboardModulo('correspondencia')">
@@ -7256,6 +7386,13 @@ function irADashboardModulo(modulo, direccionFiltro) {
   if (link) link.classList.add('active');
   renderModule(modulo);
   cerrarSidebarMobile();
+
+  if (modulo === 'costos' && direccionFiltro === 'sri') {
+    setTimeout(() => {
+      const btn = document.getElementById('costos-tab-sri');
+      if (btn) btn.click();
+    }, 50);
+  }
 
   if (modulo === 'correspondencia' && direccionFiltro) {
     // Espera a que el módulo termine de pintar el filtro antes de aplicarlo
