@@ -1067,6 +1067,19 @@ function showScreen(screenId) {
   });
 }
 
+function sanitizarNombreParaStorage(nombre) {
+  const idx = nombre.lastIndexOf('.');
+  const base = idx > 0 ? nombre.slice(0, idx) : nombre;
+  const ext = idx > 0 ? nombre.slice(idx + 1) : '';
+  const limpio = base
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-').replace(/^-|-$/g, '')
+    .slice(0, 80) || 'archivo';
+  const extLimpia = ext.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
+  return extLimpia ? limpio + '.' + extLimpia : limpio;
+}
+
 function showMsg(elementId, text, type) {
   const el = document.getElementById(elementId);
   el.className = 'msg ' + type;
@@ -3316,7 +3329,7 @@ async function subirFacturaCartera() {
   let tamanoBytes = null;
 
   if (file) {
-    rutaArchivo = modal_cartera_id + '/' + Date.now() + '-' + file.name;
+    rutaArchivo = modal_cartera_id + '/' + Date.now() + '-' + sanitizarNombreParaStorage(file.name);
     const { error: uploadError } = await sb.storage.from('cartera-facturas').upload(rutaArchivo, file);
     if (uploadError) {
       showMsg('cart-msg', 'Error subiendo el archivo: ' + uploadError.message, 'error');
@@ -4971,7 +4984,7 @@ async function subirAdjunto(containerId, tipo, entidadId, file) {
 
   // Ruta única dentro del bucket: entidadId/timestamp-nombrearchivo,
   // para evitar colisiones entre archivos del mismo nombre.
-  const rutaArchivo = entidadId + '/' + Date.now() + '-' + file.name;
+  const rutaArchivo = entidadId + '/' + Date.now() + '-' + sanitizarNombreParaStorage(file.name);
 
   const { error: uploadError } = await sb.storage
     .from(cfg.bucket)
