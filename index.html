@@ -5468,34 +5468,46 @@ function construirParrafosOficio(cuerpo) {
 function escribirParrafoJustificado(doc, texto, x, yInicial, anchoContenido, lineHeight, opciones) {
   opciones = opciones || {};
   let y = yInicial;
-  const lineas = doc.splitTextToSize(texto, anchoContenido);
 
-  lineas.forEach((linea, idx) => {
-    if (opciones.onNuevaLinea) {
-      const resultado = opciones.onNuevaLinea(y);
-      if (resultado) y = resultado;
-    }
+  // Un párrafo puede traer saltos de línea simples (Enter) y tabuladores
+  // (al pegar desde Word). Cada salto simple es un segmento independiente:
+  // su última línea NO se justifica, igual que la última del párrafo.
+  const segmentos = texto.split('\n')
+    .map(s => s.replace(/[\t\u00a0]+/g, ' ').replace(/ {2,}/g, ' ').trim())
+    .filter(s => s.length);
 
-    const esUltimaLinea = idx === lineas.length - 1;
-    const anchoLinea = doc.getTextWidth(linea);
+  segmentos.forEach(segmento => {
+    const lineas = doc.splitTextToSize(segmento, anchoContenido);
 
-    if (!esUltimaLinea && anchoLinea < anchoContenido * 0.98) {
-      const palabras = linea.split(' ');
-      if (palabras.length > 1) {
-        const anchoPalabras = palabras.reduce((acc, p) => acc + doc.getTextWidth(p), 0);
-        const espacioNecesario = (anchoContenido - anchoPalabras) / (palabras.length - 1);
-        let xPos = x;
-        palabras.forEach((palabra) => {
-          doc.text(palabra, xPos, y);
-          xPos += doc.getTextWidth(palabra) + espacioNecesario;
-        });
+    lineas.forEach((linea, idx) => {
+      if (opciones.onNuevaLinea) {
+        const resultado = opciones.onNuevaLinea(y);
+        if (resultado) y = resultado;
+      }
+
+      const esUltimaLinea = idx === lineas.length - 1;
+      const anchoLinea = doc.getTextWidth(linea);
+
+      // Solo se justifican líneas intermedias que ya casi llenan el ancho
+      // (las cortas se dejan naturales para no abrir espacios enormes).
+      if (!esUltimaLinea && anchoLinea < anchoContenido * 0.995 && anchoLinea > anchoContenido * 0.55) {
+        const palabras = linea.split(' ').filter(p => p.length);
+        if (palabras.length > 1) {
+          const anchoPalabras = palabras.reduce((acc, p) => acc + doc.getTextWidth(p), 0);
+          const espacioNecesario = (anchoContenido - anchoPalabras) / (palabras.length - 1);
+          let xPos = x;
+          palabras.forEach((palabra) => {
+            doc.text(palabra, xPos, y);
+            xPos += doc.getTextWidth(palabra) + espacioNecesario;
+          });
+        } else {
+          doc.text(linea, x, y);
+        }
       } else {
         doc.text(linea, x, y);
       }
-    } else {
-      doc.text(linea, x, y);
-    }
-    y += lineHeight;
+      y += lineHeight;
+    });
   });
 
   return y;
@@ -5544,6 +5556,10 @@ function generarPdfOficio(datos) {
     doc.addPage();
     paginaActual++;
     pintarMembrete();
+    // Restaurar la fuente del cuerpo: el pie de página la deja en 8pt
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10.5);
+    doc.setTextColor(0, 0, 0);
     return 38;
   }
 
