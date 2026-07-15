@@ -5142,8 +5142,8 @@ async function cargarCorrespondencia() {
     .order('numero', { ascending: false });
 
   if (error) {
-    document.getElementById('correspondencia-lista').innerHTML =
-      '<p style="color:var(--color-danger);">Error: ' + escapeHtml(error.message) + '</p>';
+    const cont = document.getElementById('correspondencia-lista');
+    if (cont) cont.innerHTML = '<p style="color:var(--color-danger);">Error: ' + escapeHtml(error.message) + '</p>';
     return;
   }
   correspondencia_cache = data || [];
@@ -5174,6 +5174,7 @@ function limpiarFiltrosCorrespondencia() {
 }
 
 function pintarCorrespondencia() {
+  if (!document.getElementById('correspondencia-lista')) return; // módulo no visible
   let lista = correspondencia_cache;
 
   if (correspondencia_filtros.direccion) {
@@ -5296,7 +5297,17 @@ function abrirModalCorrespondenciaConDireccion(direccion) {
 }
 
 function pintarFormularioCorrespondencia(registro, direccion, datosRespuesta) {
-  const pendientes = correspondencia_cache.filter(c => c.estado_respuesta === 'pendiente' && c.id !== modal_correspondencia_id);
+  // Candidatas a "es respuesta de": TODA la correspondencia en dirección
+  // contraria (una recibida puede contestar cualquier enviada, y viceversa).
+  // Las que esperan respuesta van primero; el resto, de la más reciente
+  // a la más antigua.
+  const direccionContraria = direccion === 'enviada' ? 'recibida' : 'enviada';
+  const candidatasRespuesta = correspondencia_cache
+    .filter(c => c.direccion === direccionContraria && c.id !== modal_correspondencia_id)
+    .sort((a, b) =>
+      ((b.estado_respuesta === 'pendiente') - (a.estado_respuesta === 'pendiente')) ||
+      String(b.numero_completo || '').localeCompare(String(a.numero_completo || ''))
+    );
   const bloqueado = !!(registro && registro.enviado_por_correo);
   const esNuevo = !registro;
   const esEnviada = direccion === 'enviada';
@@ -5393,11 +5404,11 @@ function pintarFormularioCorrespondencia(registro, direccion, datosRespuesta) {
           <label for="corr-requiere-respuesta">Requiere respuesta</label>
         </div>
 
-        ${pendientes.length ? `
-          <label style="margin-top:12px;">\u00bfEs respuesta a alguna correspondencia pendiente?</label>
+        ${candidatasRespuesta.length ? `
+          <label style="margin-top:12px;">\u00bfEs respuesta a alguna correspondencia ${direccionContraria}?</label>
           <select id="corr-relacionada" ${bloqueado ? 'disabled' : ''}>
             <option value="">No es respuesta a ninguna</option>
-            ${pendientes.map(p => '<option value="' + p.id + '" ' + (placeholderRespuesta.comunicacion_relacionada_id === p.id ? 'selected' : '') + '>' + escapeHtml(p.numero_completo) + ' \u2014 ' + (escapeHtml(p.referencia) || '') + '</option>').join('')}
+            ${candidatasRespuesta.map(p => '<option value="' + p.id + '" ' + ((registro?.comunicacion_relacionada_id || placeholderRespuesta.comunicacion_relacionada_id) === p.id ? 'selected' : '') + '>' + escapeHtml(p.numero_completo) + ' \u2014 ' + (escapeHtml(p.referencia) || '(sin referencia)') + (p.estado_respuesta === 'pendiente' ? ' \u00b7 esperando respuesta' : '') + '</option>').join('')}
           </select>
         ` : ''}
 
@@ -5791,6 +5802,15 @@ async function guardarCorrespondencia() {
       showMsg('corr-msg', 'Error guardando: ' + error.message, 'error');
       return;
     }
+  }
+
+  // Si esta correspondencia responde a otra que estaba esperando
+  // respuesta, la original queda marcada como respondida.
+  if (payload.comunicacion_relacionada_id) {
+    await sb.from('correspondencia')
+      .update({ estado_respuesta: 'respondida' })
+      .eq('id', payload.comunicacion_relacionada_id)
+      .eq('estado_respuesta', 'pendiente');
   }
 
   closeModal();
@@ -6289,11 +6309,17 @@ async function enviarCorrespondenciaPorCorreo(id) {
     }
 
     alert('Correspondencia enviada correctamente a ' + registro.destinatario_email + '.');
-    await cargarCorrespondencia();
-    abrirModalCorrespondencia(id);
+    try {
+      await cargarCorrespondencia();
+      abrirModalCorrespondencia(id);
+    } catch (errRefresco) {
+      // El correo YA se envió; un fallo al repintar no debe alarmar ni
+      // inducir a reenviar. Solo se registra en consola.
+      console.error('Error refrescando la vista tras el envío:', errRefresco);
+    }
 
   } catch (err) {
-    alert('Error de conexión: ' + err.message);
+    alert('Error de conexión (el correo NO se envió): ' + err.message);
   }
 }
 
