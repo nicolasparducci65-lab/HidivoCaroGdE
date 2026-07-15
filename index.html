@@ -5867,10 +5867,18 @@ async function cargarLibreriasFirma() {
   librerias_firma_cargadas = true;
 }
 
+function fechaLargaOficio(fechaIso) {
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const dias = ['domingo','lunes','martes','mi\u00e9rcoles','jueves','viernes','s\u00e1bado'];
+  const partes = (fechaIso || '').split('-').map(Number);
+  const f = (partes.length === 3 && partes[0]) ? new Date(partes[0], partes[1] - 1, partes[2]) : new Date();
+  return 'Guayaquil, ' + dias[f.getDay()] + ' ' + f.getDate() + ' de ' + meses[f.getMonth()] + ' de ' + f.getFullYear();
+}
+
 function abrirModalFirmaElectronica() {
   const registro = correspondencia_cache.find(c => c.id === modal_correspondencia_id);
-  if (!registro || !registro.pdf_generado_url) {
-    alert('Primero genera el PDF del oficio (guárdalo) para poder firmarlo.');
+  if (!registro || !registro.numero_completo) {
+    alert('Primero guarda el oficio para poder firmarlo.');
     return;
   }
   document.getElementById('modal-firma-container').innerHTML = `
@@ -5910,11 +5918,22 @@ async function firmarOficioElectronicamente() {
   try {
     await cargarLibreriasFirma();
 
-    const { data: pdfBlob, error: errDescarga } = await sb.storage
-      .from('comunicaciones-adjuntos').download(registro.pdf_generado_url);
-    if (errDescarga) throw new Error('No se pudo descargar el PDF generado: ' + errDescarga.message);
-
-    const pdfBytes = await pdfBlob.arrayBuffer();
+    // El PDF se regenera aquí mismo desde los datos vigentes del registro,
+    // para que lo firmado siempre lleve el formato más reciente del
+    // generador (y nunca una versión vieja almacenada en Storage).
+    const docPdf = generarPdfOficio({
+      numero_completo: registro.numero_completo,
+      fecha_larga: fechaLargaOficio(registro.fecha),
+      destinatario_titulo: registro.destinatario_titulo || '',
+      destinatario_nombre: registro.destinatario_nombre || '',
+      destinatario_entidad: registro.destinatario_entidad || '',
+      destinatario_ciudad: registro.destinatario_ciudad || 'Ciudad',
+      referencia: registro.referencia || '',
+      cuerpo: registro.cuerpo || '',
+      firmante_nombre: registro.firmante_nombre || '',
+      firmante_cargo: registro.firmante_cargo || ''
+    });
+    const pdfBytes = docPdf.output('arraybuffer');
     const p12Bytes = await fileP12.arrayBuffer();
 
     const firmado = await firmarPdfConP12(pdfBytes, p12Bytes, password, {
