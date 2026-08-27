@@ -5173,7 +5173,7 @@ function pintarDocumentosEmpresa() {
 }
 
 async function subirDocumentoEmpresa() {
-  limpiarMsg ? limpiarMsg('doc-emp-msg') : null;
+  showMsg('doc-emp-msg', '', '');
   const descripcion = document.getElementById('doc-emp-descripcion').value.trim();
   const file = document.getElementById('doc-emp-archivo').files[0];
   if (!file) { showMsg('doc-emp-msg', 'Selecciona el archivo a subir.', 'error'); return; }
