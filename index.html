@@ -5116,6 +5116,14 @@ async function renderDocumentosEmpresa() {
 }
 
 async function cargarDocumentosEmpresa() {
+  // Cargar el rol si aún no está en memoria (p. ej. si se entra directo
+  // a este módulo sin pasar por Usuarios o Central de Costos)
+  if (usuario_actual_rol === null) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { data: miPerfil } = await sb.from('perfiles').select('rol').eq('id', user.id).single();
+    usuario_actual_rol = miPerfil?.rol;
+  }
+
   const { data, error } = await sb
     .from('documentos_empresa')
     .select('*, perfiles(nombre_completo)')
@@ -5181,7 +5189,7 @@ async function subirDocumentoEmpresa() {
 
   showMsg('doc-emp-msg', 'Subiendo...', '');
   const ruta = Date.now() + '-' + sanitizarNombreParaStorage(file.name);
-  const { error: errSubida } = await sb.storage.from('documentos-empresa').upload(ruta, file);
+  const { error: errSubida } = await sb.storage.from('documentos-empresa').upload(ruta, file, { contentType: file.type || 'application/octet-stream' });
   if (errSubida) { showMsg('doc-emp-msg', 'Error subiendo el archivo: ' + errSubida.message, 'error'); return; }
 
   const { data: { user } } = await sb.auth.getUser();
@@ -5204,13 +5212,47 @@ async function subirDocumentoEmpresa() {
   await cargarDocumentosEmpresa();
 }
 
+const MIME_VISUALIZABLES = {
+  pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+  gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', txt: 'text/plain'
+};
+
 async function verDocumentoEmpresa(id, descargar) {
   const doc = documentos_empresa_cache.find(d => d.id === id);
   if (!doc) return;
-  const opciones = descargar ? { download: doc.nombre_archivo } : {};
-  const { data, error } = await sb.storage.from('documentos-empresa').createSignedUrl(doc.url, 3600, opciones);
-  if (error || !data) { alert('No se pudo generar el enlace: ' + (error?.message || '')); return; }
-  window.open(data.signedUrl, '_blank');
+
+  const ext = (doc.nombre_archivo || '').split('.').pop().toLowerCase();
+  const mimeVisor = MIME_VISUALIZABLES[ext];
+
+  if (descargar || !mimeVisor) {
+    // Descargar: baja directo con el nombre original, sin abrir pestañas.
+    // (Word/Excel y otros formatos que el navegador no visualiza también
+    // llegan aquí desde "Ver".)
+    const { data, error } = await sb.storage.from('documentos-empresa')
+      .createSignedUrl(doc.url, 3600, { download: doc.nombre_archivo });
+    if (error || !data) { alert('No se pudo generar el enlace: ' + (error?.message || '')); return; }
+    window.location.href = data.signedUrl;
+    return;
+  }
+
+  // Ver: abre el documento dentro del navegador. Se descarga el contenido
+  // y se sirve como visor local con el tipo correcto forzado por extensión,
+  // para que el navegador lo muestre en vez de descargarlo.
+  const visor = window.open('', '_blank');
+  const { data, error } = await sb.storage.from('documentos-empresa').download(doc.url);
+  if (error || !data) {
+    if (visor) visor.close();
+    alert('No se pudo abrir el documento: ' + (error?.message || ''));
+    return;
+  }
+  const blob = data.type === mimeVisor ? data : new Blob([data], { type: mimeVisor });
+  const urlLocal = URL.createObjectURL(blob);
+  if (visor) {
+    visor.location.href = urlLocal;
+  } else {
+    // Si el navegador bloqueó la pestaña, se abre en la actual
+    window.location.href = urlLocal;
+  }
 }
 
 async function eliminarDocumentoEmpresa(id) {
