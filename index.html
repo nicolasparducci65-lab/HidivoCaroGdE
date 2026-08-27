@@ -1028,6 +1028,7 @@
         <a href="#" data-module="proformas">Proformas</a>
         <a href="#" data-module="contratos">Contratos</a>
         <a href="#" data-module="correspondencia">Correspondencia</a>
+        <a href="#" data-module="documentos">Documentos</a>
         <a href="#" data-module="cartera">Cartera</a>
         <a href="#" data-module="costos">Central de Costos</a>
         <a href="#" data-module="tesoreria">Tesorería</a>
@@ -1276,6 +1277,7 @@ function renderModule(modulo) {
     proformas: renderProformas,
     contratos: renderContratos,
     correspondencia: renderCorrespondencia,
+    documentos: renderDocumentosEmpresa,
     cartera: renderCartera,
     costos: renderCostos,
     tesoreria: renderTesoreria,
@@ -5067,6 +5069,159 @@ const TIPO_CORRESPONDENCIA_LABELS = { oficio: 'Oficio', correo: 'Correo', memora
 let correspondencia_cache = [];
 let correspondencia_filtros = { direccion: '', contrato_id: '', proveedor_id: '', es_contratista: '', cliente_id: '', fecha_desde: '', fecha_hasta: '' };
 let modal_correspondencia_id = null;
+
+// ==================== MÓDULO: DOCUMENTOS DE LA EMPRESA ====================
+
+let documentos_empresa_cache = [];
+
+async function renderDocumentosEmpresa() {
+  document.getElementById('main-content').innerHTML = `
+    <div class="module-header">
+      <h2>Documentos de la empresa</h2>
+    </div>
+    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:10px;padding:16px;margin-bottom:16px;">
+      <h2 style="font-size:15px;margin-bottom:10px;">Subir documento</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1;min-width:220px;">
+          <label>Descripción del documento</label>
+          <input type="text" id="doc-emp-descripcion" placeholder="ej. RUC actualizado 2026, Nombramiento gerente, Póliza vigente">
+        </div>
+        <div>
+          <label>Archivo</label>
+          <input type="file" id="doc-emp-archivo">
+        </div>
+        <button class="btn" onclick="subirDocumentoEmpresa()">Subir</button>
+      </div>
+      <div id="doc-emp-msg"></div>
+    </div>
+
+    <input type="text" id="doc-emp-buscar" placeholder="Buscar por nombre o descripción..." oninput="pintarDocumentosEmpresa()" style="margin-bottom:12px;">
+
+    <div style="overflow-x:auto;">
+    <table class="data-table" style="font-size:13px;">
+      <thead>
+        <tr>
+          <th>Documento</th>
+          <th>Descripción</th>
+          <th>Fecha de subida</th>
+          <th>Tamaño</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="doc-emp-tbody"><tr><td colspan="5">Cargando...</td></tr></tbody>
+    </table>
+    </div>
+  `;
+  await cargarDocumentosEmpresa();
+}
+
+async function cargarDocumentosEmpresa() {
+  const { data, error } = await sb
+    .from('documentos_empresa')
+    .select('*, perfiles(nombre_completo)')
+    .order('created_at', { ascending: false });
+  if (error) {
+    const tbody = document.getElementById('doc-emp-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="color:var(--color-danger);">Error: ' + escapeHtml(error.message) + '</td></tr>';
+    return;
+  }
+  documentos_empresa_cache = data || [];
+  pintarDocumentosEmpresa();
+}
+
+function formatearTamano(bytes) {
+  const n = Number(bytes || 0);
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
+
+function pintarDocumentosEmpresa() {
+  const tbody = document.getElementById('doc-emp-tbody');
+  if (!tbody) return;
+  const filtro = (document.getElementById('doc-emp-buscar')?.value || '').toLowerCase();
+  const lista = documentos_empresa_cache.filter(d =>
+    !filtro ||
+    (d.nombre_archivo || '').toLowerCase().includes(filtro) ||
+    (d.descripcion || '').toLowerCase().includes(filtro)
+  );
+
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--color-text-muted);">' +
+      (documentos_empresa_cache.length ? 'Ningún documento coincide con la búsqueda.' : 'Aún no hay documentos. Sube el primero arriba.') + '</td></tr>';
+    return;
+  }
+
+  const esAdmin = usuario_actual_rol === 'admin';
+  tbody.innerHTML = lista.map(d => {
+    const fecha = d.created_at ? new Date(d.created_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+    const quien = d.perfiles?.nombre_completo ? '<br><span style="font-size:11px;color:var(--color-text-muted);">por ' + escapeHtml(d.perfiles.nombre_completo) + '</span>' : '';
+    return `
+      <tr>
+        <td style="font-weight:500;">${escapeHtml(d.nombre_archivo)}</td>
+        <td>${escapeHtml(d.descripcion || '—')}</td>
+        <td>${fecha}${quien}</td>
+        <td>${formatearTamano(d.tamano_bytes)}</td>
+        <td style="white-space:nowrap;">
+          <a onclick="verDocumentoEmpresa('${d.id}', false)">Ver</a> ·
+          <a onclick="verDocumentoEmpresa('${d.id}', true)">Descargar</a>
+          ${esAdmin ? ' · <a onclick="eliminarDocumentoEmpresa(\'' + d.id + '\')" style="color:var(--color-danger);">Eliminar</a>' : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function subirDocumentoEmpresa() {
+  limpiarMsg ? limpiarMsg('doc-emp-msg') : null;
+  const descripcion = document.getElementById('doc-emp-descripcion').value.trim();
+  const file = document.getElementById('doc-emp-archivo').files[0];
+  if (!file) { showMsg('doc-emp-msg', 'Selecciona el archivo a subir.', 'error'); return; }
+  if (!descripcion) { showMsg('doc-emp-msg', 'Escribe una descripción: es lo que permitirá encontrar el documento después.', 'error'); return; }
+
+  showMsg('doc-emp-msg', 'Subiendo...', '');
+  const ruta = Date.now() + '-' + sanitizarNombreParaStorage(file.name);
+  const { error: errSubida } = await sb.storage.from('documentos-empresa').upload(ruta, file);
+  if (errSubida) { showMsg('doc-emp-msg', 'Error subiendo el archivo: ' + errSubida.message, 'error'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { error: errInsert } = await sb.from('documentos_empresa').insert({
+    nombre_archivo: file.name,
+    descripcion: descripcion,
+    url: ruta,
+    tamano_bytes: file.size,
+    subido_por: user?.id || null
+  });
+  if (errInsert) {
+    await sb.storage.from('documentos-empresa').remove([ruta]);
+    showMsg('doc-emp-msg', 'Error registrando el documento: ' + errInsert.message, 'error');
+    return;
+  }
+
+  showMsg('doc-emp-msg', 'Documento subido correctamente.', 'ok');
+  document.getElementById('doc-emp-descripcion').value = '';
+  document.getElementById('doc-emp-archivo').value = '';
+  await cargarDocumentosEmpresa();
+}
+
+async function verDocumentoEmpresa(id, descargar) {
+  const doc = documentos_empresa_cache.find(d => d.id === id);
+  if (!doc) return;
+  const opciones = descargar ? { download: doc.nombre_archivo } : {};
+  const { data, error } = await sb.storage.from('documentos-empresa').createSignedUrl(doc.url, 3600, opciones);
+  if (error || !data) { alert('No se pudo generar el enlace: ' + (error?.message || '')); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function eliminarDocumentoEmpresa(id) {
+  const doc = documentos_empresa_cache.find(d => d.id === id);
+  if (!doc) return;
+  if (!confirm('¿Eliminar definitivamente "' + doc.nombre_archivo + '"? Esta acción no se puede deshacer.')) return;
+  await sb.storage.from('documentos-empresa').remove([doc.url]);
+  const { error } = await sb.from('documentos_empresa').delete().eq('id', id);
+  if (error) { alert('Error eliminando: ' + error.message); return; }
+  await cargarDocumentosEmpresa();
+}
 
 async function renderCorrespondencia() {
   const main = document.getElementById('main-content');
