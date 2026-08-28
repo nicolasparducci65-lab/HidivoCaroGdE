@@ -5073,6 +5073,7 @@ let modal_correspondencia_id = null;
 // ==================== MÓDULO: DOCUMENTOS DE LA EMPRESA ====================
 
 let documentos_empresa_cache = [];
+let doc_emp_carpeta_activa = 'todas';
 
 async function renderDocumentosEmpresa() {
   document.getElementById('main-content').innerHTML = `
@@ -5086,6 +5087,11 @@ async function renderDocumentosEmpresa() {
           <label>Descripción del documento</label>
           <input type="text" id="doc-emp-descripcion" placeholder="ej. RUC actualizado 2026, Nombramiento gerente, Póliza vigente">
         </div>
+        <div style="min-width:180px;">
+          <label>Carpeta</label>
+          <select id="doc-emp-carpeta" onchange="document.getElementById('doc-emp-carpeta-nueva').style.display = this.value === '__nueva__' ? 'block' : 'none';"></select>
+          <input type="text" id="doc-emp-carpeta-nueva" placeholder="Nombre de la nueva carpeta" style="display:none;margin-top:6px;">
+        </div>
         <div>
           <label>Archivo</label>
           <input type="file" id="doc-emp-archivo">
@@ -5095,6 +5101,8 @@ async function renderDocumentosEmpresa() {
       <div id="doc-emp-msg"></div>
     </div>
 
+    <div class="filter-pills" id="doc-emp-carpetas" style="margin-bottom:12px;"></div>
+
     <input type="text" id="doc-emp-buscar" placeholder="Buscar por nombre o descripción..." oninput="pintarDocumentosEmpresa()" style="margin-bottom:12px;">
 
     <div style="overflow-x:auto;">
@@ -5102,13 +5110,14 @@ async function renderDocumentosEmpresa() {
       <thead>
         <tr>
           <th>Documento</th>
+          <th>Carpeta</th>
           <th>Descripción</th>
           <th>Fecha de subida</th>
           <th>Tamaño</th>
           <th></th>
         </tr>
       </thead>
-      <tbody id="doc-emp-tbody"><tr><td colspan="5">Cargando...</td></tr></tbody>
+      <tbody id="doc-emp-tbody"><tr><td colspan="6">Cargando...</td></tr></tbody>
     </table>
     </div>
   `;
@@ -5134,6 +5143,58 @@ async function cargarDocumentosEmpresa() {
     return;
   }
   documentos_empresa_cache = data || [];
+  pintarCarpetasDocEmp();
+  pintarDocumentosEmpresa();
+}
+
+function listaCarpetasDocEmp() {
+  const set = new Set(documentos_empresa_cache.map(d => d.carpeta || 'General'));
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+function pintarCarpetasDocEmp() {
+  const cont = document.getElementById('doc-emp-carpetas');
+  const sel = document.getElementById('doc-emp-carpeta');
+  const carpetas = listaCarpetasDocEmp();
+
+  if (cont) {
+    if (doc_emp_carpeta_activa !== 'todas' && !carpetas.includes(doc_emp_carpeta_activa)) doc_emp_carpeta_activa = 'todas';
+    const total = documentos_empresa_cache.length;
+    cont.innerHTML =
+      '<button class="' + (doc_emp_carpeta_activa === 'todas' ? 'active' : '') + '" onclick="doc_emp_carpeta_activa=\'todas\'; pintarCarpetasDocEmp(); pintarDocumentosEmpresa();">Todas (' + total + ')</button>' +
+      carpetas.map(c => {
+        const n = documentos_empresa_cache.filter(d => (d.carpeta || 'General') === c).length;
+        return '<button class="' + (doc_emp_carpeta_activa === c ? 'active' : '') + '" onclick="doc_emp_carpeta_activa=' + JSON.stringify(c).replace(/"/g, '&quot;') + '; pintarCarpetasDocEmp(); pintarDocumentosEmpresa();">' + escapeHtml(c) + ' (' + n + ')</button>';
+      }).join('');
+  }
+
+  if (sel) {
+    const seleccionActual = sel.value && sel.value !== '__nueva__' ? sel.value : (doc_emp_carpeta_activa !== 'todas' ? doc_emp_carpeta_activa : 'General');
+    const base = carpetas.length ? carpetas : ['General'];
+    const conGeneral = base.includes('General') ? base : ['General', ...base];
+    sel.innerHTML = conGeneral.map(c => '<option value="' + escapeHtml(c) + '"' + (c === seleccionActual ? ' selected' : '') + '>' + escapeHtml(c) + '</option>').join('') +
+      '<option value="__nueva__">+ Nueva carpeta...</option>';
+  }
+}
+
+function opcionesCarpetaFila(actual) {
+  const carpetas = listaCarpetasDocEmp();
+  const base = carpetas.includes(actual) ? carpetas : [actual, ...carpetas];
+  return base.map(c => '<option value="' + escapeHtml(c) + '"' + (c === actual ? ' selected' : '') + '>' + escapeHtml(c) + '</option>').join('') +
+    '<option value="__nueva__">+ Nueva carpeta...</option>';
+}
+
+async function moverDocumentoCarpeta(id, selectEl) {
+  let carpeta = selectEl.value;
+  if (carpeta === '__nueva__') {
+    carpeta = (prompt('Nombre de la nueva carpeta:') || '').trim();
+    if (!carpeta) { pintarDocumentosEmpresa(); return; }
+  }
+  const { error } = await sb.from('documentos_empresa').update({ carpeta: carpeta }).eq('id', id);
+  if (error) { alert('Error moviendo el documento: ' + error.message); return; }
+  const doc = documentos_empresa_cache.find(d => d.id === id);
+  if (doc) doc.carpeta = carpeta;
+  pintarCarpetasDocEmp();
   pintarDocumentosEmpresa();
 }
 
@@ -5153,14 +5214,15 @@ function pintarDocumentosEmpresa() {
   if (!tbody) return;
   const filtro = (document.getElementById('doc-emp-buscar')?.value || '').toLowerCase();
   const lista = documentos_empresa_cache.filter(d =>
-    !filtro ||
-    (d.nombre_archivo || '').toLowerCase().includes(filtro) ||
-    (d.descripcion || '').toLowerCase().includes(filtro)
+    (doc_emp_carpeta_activa === 'todas' || (d.carpeta || 'General') === doc_emp_carpeta_activa) &&
+    (!filtro ||
+      (d.nombre_archivo || '').toLowerCase().includes(filtro) ||
+      (d.descripcion || '').toLowerCase().includes(filtro))
   );
 
   if (!lista.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--color-text-muted);">' +
-      (documentos_empresa_cache.length ? 'Ningún documento coincide con la búsqueda.' : 'Aún no hay documentos. Sube el primero arriba.') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--color-text-muted);">' +
+      (documentos_empresa_cache.length ? 'Ningún documento coincide con el filtro.' : 'Aún no hay documentos. Sube el primero arriba.') + '</td></tr>';
     return;
   }
 
@@ -5171,6 +5233,9 @@ function pintarDocumentosEmpresa() {
     return `
       <tr>
         <td style="font-weight:500;">${escapeHtml(d.nombre_archivo)}</td>
+        <td>${esAdmin
+          ? '<select onchange="moverDocumentoCarpeta(\'' + d.id + '\', this)" style="font-size:12px;padding:5px 6px;max-width:150px;">' + opcionesCarpetaFila(d.carpeta || 'General') + '</select>'
+          : escapeHtml(d.carpeta || 'General')}</td>
         <td>${escapeHtml(d.descripcion || '—')}</td>
         <td>${fecha}${quien}</td>
         <td>${formatearTamano(d.tamano_bytes)}</td>
@@ -5190,6 +5255,12 @@ async function subirDocumentoEmpresa() {
   showMsg('doc-emp-msg', '', '');
   const descripcion = document.getElementById('doc-emp-descripcion').value.trim();
   const file = document.getElementById('doc-emp-archivo').files[0];
+  let carpeta = document.getElementById('doc-emp-carpeta').value;
+  if (carpeta === '__nueva__') {
+    carpeta = document.getElementById('doc-emp-carpeta-nueva').value.trim();
+    if (!carpeta) { showMsg('doc-emp-msg', 'Escribe el nombre de la nueva carpeta.', 'error'); return; }
+  }
+  if (!carpeta) carpeta = 'General';
   if (!file) { showMsg('doc-emp-msg', 'Selecciona el archivo a subir.', 'error'); return; }
   if (!descripcion) { showMsg('doc-emp-msg', 'Escribe una descripción: es lo que permitirá encontrar el documento después.', 'error'); return; }
 
@@ -5202,6 +5273,7 @@ async function subirDocumentoEmpresa() {
   const { error: errInsert } = await sb.from('documentos_empresa').insert({
     nombre_archivo: file.name,
     descripcion: descripcion,
+    carpeta: carpeta,
     url: ruta,
     tamano_bytes: file.size,
     subido_por: user?.id || null
@@ -5215,6 +5287,8 @@ async function subirDocumentoEmpresa() {
   showMsg('doc-emp-msg', 'Documento subido correctamente.', 'ok');
   document.getElementById('doc-emp-descripcion').value = '';
   document.getElementById('doc-emp-archivo').value = '';
+  document.getElementById('doc-emp-carpeta-nueva').value = '';
+  document.getElementById('doc-emp-carpeta-nueva').style.display = 'none';
   await cargarDocumentosEmpresa();
 }
 
