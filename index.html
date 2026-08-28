@@ -5190,8 +5190,14 @@ async function moverDocumentoCarpeta(id, selectEl) {
     carpeta = (prompt('Nombre de la nueva carpeta:') || '').trim();
     if (!carpeta) { pintarDocumentosEmpresa(); return; }
   }
-  const { error } = await sb.from('documentos_empresa').update({ carpeta: carpeta }).eq('id', id);
-  if (error) { alert('Error moviendo el documento: ' + error.message); return; }
+  const { data: actualizadas, error } = await sb.from('documentos_empresa')
+    .update({ carpeta: carpeta }).eq('id', id).select('id');
+  if (error) { alert('Error moviendo el documento: ' + error.message); pintarDocumentosEmpresa(); return; }
+  if (!actualizadas || !actualizadas.length) {
+    alert('El cambio no se guardó (sin permiso de actualización en la base). Avisa al administrador.');
+    pintarDocumentosEmpresa();
+    return;
+  }
   const doc = documentos_empresa_cache.find(d => d.id === id);
   if (doc) doc.carpeta = carpeta;
   pintarCarpetasDocEmp();
